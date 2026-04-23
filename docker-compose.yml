@@ -1,0 +1,14 @@
+services:
+  minifold:
+    build: .
+    image: minifold:local
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_PATH: /app/data/minifold.db
+    volumes:
+      - minifold-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  minifold-data:
