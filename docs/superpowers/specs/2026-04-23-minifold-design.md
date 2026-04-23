@@ -136,7 +136,7 @@ Deep links, bookmarks, and shares all work without any translation layer.
 
 `StorageProvider.list(path)` is called on every directory request. The filesystem is always the source of truth — no database index. Adding a file and reloading the page makes it visible immediately.
 
-Results are sorted: folders first, then files alphabetically.
+Results are sorted: folders first, then files alphabetically. All Minifold dot-files (`.minifold_*`, `.minifold_access.json`) are hidden from listings in all views.
 
 ### Special Description Files
 
@@ -232,22 +232,42 @@ On folder navigation:
 
 ## 8. Access Control
 
+### Source of Truth: `.minifold_access.json`
+
+Permissions are defined entirely by `.minifold_access.json` dot-files stored alongside the files themselves — via the StorageProvider, so this works identically on local FS and S3. There is no SQLite `access_rules` table. Uploading a folder with a `.minifold_access.json` file means permissions are immediately ready with no UI configuration required.
+
+`.minifold_access.json` format:
+```json
+{
+  "default": "signed-in",
+  "files": {
+    "public_preview.stl": "public",
+    "secret.stl": "private",
+    "patrons-only.stl": { "level": "user-list", "users": ["user-uuid-1", "user-uuid-2"] }
+  }
+}
+```
+
+`"default"` applies to all items in the directory not explicitly listed under `"files"`. `"files"` entries override the default for specific items by name. The file is hidden from the grid (treated as a meta file, like description files).
+
 ### Permission Levels
 
 | Level | Who can access |
 |---|---|
 | `public` | Anyone on the internet, no login required |
 | `signed-in` | Any authenticated user |
-| `user-list` | Specific user IDs only |
+| `user-list` | Specific user IDs (SQLite UUIDs) listed in the `users` array |
 | `private` | Admins only |
 
 ### Resolution (most specific wins)
 
 ```
-file override → parent directory override → grandparent → ... → provider default → global default
+file entry in directory's .minifold_access.json
+  → "default" in directory's .minifold_access.json
+  → walk up to parent directory, repeat
+  → provider default (in provider DB config)
+  → global default (in DB settings)
 ```
-
-Global default and per-provider defaults are set in admin settings. Per-path overrides are stored in SQLite (`access_rules` table: `path`, `level`, `user_ids[]`).
 
 ### Behaviour
 
@@ -257,7 +277,7 @@ Global default and per-provider defaults are set in admin settings. Per-path ove
 
 ### UI
 
-Right-click (desktop) or long-press (mobile) on any file or folder → "Set access" popover with level selector and user picker. Mirrors Google Drive's sharing model.
+Right-click (desktop) or long-press (mobile) on any file or folder → "Set access" popover with level selector and user picker. On save, the UI reads the current `.minifold_access.json` for that directory via StorageProvider, updates the relevant entry, and writes the file back. The file is the single source of truth — the UI is just a convenient editor for it.
 
 ---
 
@@ -394,13 +414,6 @@ CREATE TABLE providers (
   type        TEXT NOT NULL,           -- 'local' | 's3'
   config      TEXT NOT NULL,           -- AES-encrypted JSON
   position    INTEGER NOT NULL DEFAULT 0
-);
-
--- Access control overrides
-CREATE TABLE access_rules (
-  path        TEXT PRIMARY KEY,        -- '{provider-slug}/{...path}'
-  level       TEXT NOT NULL,           -- 'public' | 'signed-in' | 'user-list' | 'private'
-  user_ids    TEXT                     -- JSON array, only for 'user-list'
 );
 
 -- App settings (key-value)
