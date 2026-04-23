@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.github
+tests
+docs
+.superpowers
+*.md
+.env*
+coverage
+Dockerfile
+docker-compose*.yml
+data
