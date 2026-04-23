@@ -6,9 +6,6 @@ const config: NextConfig = {
   outputFileTracingIncludes: {
     "/api/**/*": ["./src/server/db/migrations/**/*.sql"],
   },
-  experimental: {
-    typedRoutes: true,
-  },
 };
 
 export default config;
