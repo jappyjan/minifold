@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, readdirSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
+import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
 import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 
@@ -42,15 +42,74 @@ function runMigrations(db, dir) {
   }
 }
 
+const SLUG_RE = /^[a-z0-9-]{1,32}$/i;
+const KEY_SETTING = "config_encryption_key";
+
+function getSetting(db, key) {
+  const row = db.prepare("SELECT value FROM settings WHERE key = ?").get(key);
+  return row?.value ?? null;
+}
+
+function setSetting(db, key, value) {
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(key, value);
+}
+
+function loadOrCreateKey(db) {
+  const existing = getSetting(db, KEY_SETTING);
+  if (existing) return Buffer.from(existing, "base64");
+  const generated = randomBytes(32);
+  setSetting(db, KEY_SETTING, generated.toString("base64"));
+  return generated;
+}
+
+function encryptJSON(db, plain) {
+  const key = loadOrCreateKey(db);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const enc = Buffer.concat([
+    cipher.update(Buffer.from(JSON.stringify(plain), "utf8")),
+    cipher.final(),
+  ]);
+  const authTag = cipher.getAuthTag();
+  return `${iv.toString("hex")}:${authTag.toString("hex")}:${enc.toString("hex")}`;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function decryptJSON(db, payload) {
+  const [ivHex, tagHex, encHex] = payload.split(":");
+  if (!ivHex || !tagHex || !encHex) throw new Error("decryptJSON: malformed");
+  const key = loadOrCreateKey(db);
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    key,
+    Buffer.from(ivHex, "hex"),
+  );
+  decipher.setAuthTag(Buffer.from(tagHex, "hex"));
+  const dec = Buffer.concat([
+    decipher.update(Buffer.from(encHex, "hex")),
+    decipher.final(),
+  ]);
+  return JSON.parse(dec.toString("utf8"));
+}
+
 function usage() {
   console.log(`minifold — admin CLI
 
-Commands:
+User commands:
   list-users                              List all users.
   reset-admin   --username <name>         Reset the password for an admin user (creates one if missing).
   promote       --username <name>         Promote a user to admin.
   demote        --username <name>         Demote an admin to user (refuses if last admin).
   delete-user   --username <name>         Delete a user (refuses if last admin).
+
+Provider commands:
+  list-providers                          List configured storage providers.
+  add-provider  --slug <s> --name <n> --root-path <p>
+                                          Add a local-FS provider.
+  remove-provider --slug <s>              Remove a provider.
 
 Environment:
   DATABASE_PATH   Path to the SQLite DB. Defaults to /app/data/minifold.db in the image,
@@ -203,6 +262,79 @@ function cmdDeleteUser(db, username) {
   return 0;
 }
 
+function cmdListProviders(db) {
+  const rows = db
+    .prepare("SELECT slug, name, type, position, created_at FROM providers ORDER BY position, created_at")
+    .all();
+  if (rows.length === 0) {
+    console.log("No providers.");
+    return 0;
+  }
+  console.log(["SLUG", "NAME", "TYPE", "POSITION", "CREATED"].join("\t"));
+  for (const r of rows) {
+    console.log(
+      [
+        r.slug,
+        r.name,
+        r.type,
+        r.position,
+        new Date(r.created_at).toISOString(),
+      ].join("\t"),
+    );
+  }
+  return 0;
+}
+
+function cmdAddProvider(db, flags) {
+  if (!flags.slug) {
+    console.error("--slug is required");
+    return 2;
+  }
+  if (!SLUG_RE.test(flags.slug)) {
+    console.error("--slug must match /^[a-z0-9-]{1,32}$/i");
+    return 2;
+  }
+  if (!flags.name) {
+    console.error("--name is required");
+    return 2;
+  }
+  if (!flags["root-path"]) {
+    console.error("--root-path is required");
+    return 2;
+  }
+  const slug = flags.slug.toLowerCase();
+  const existing = db.prepare("SELECT 1 FROM providers WHERE slug = ?").get(slug);
+  if (existing) {
+    console.error(`Provider slug already exists: ${slug}`);
+    return 1;
+  }
+  const encrypted = encryptJSON(db, { rootPath: flags["root-path"] });
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO providers (slug, name, type, config, position, created_at)
+     VALUES (?, ?, 'local', ?, 0, ?)`,
+  ).run(slug, flags.name, encrypted, now);
+  console.log(`Added provider ${slug} (${flags.name}) → ${flags["root-path"]}`);
+  return 0;
+}
+
+function cmdRemoveProvider(db, slug) {
+  if (!slug) {
+    console.error("--slug is required");
+    return 2;
+  }
+  const found = db
+    .prepare("SELECT 1 FROM providers WHERE slug = ?")
+    .get(slug.toLowerCase());
+  if (!found) {
+    console.error(`No such provider: ${slug}`);
+    return 1;
+  }
+  db.prepare("DELETE FROM providers WHERE slug = ?").run(slug.toLowerCase());
+  console.log(`Removed provider ${slug}.`);
+  return 0;
+}
+
 async function main() {
   const [, , cmd, ...rest] = process.argv;
   if (!cmd) {
@@ -223,6 +355,12 @@ async function main() {
         return cmdDemote(db, flags.username);
       case "delete-user":
         return cmdDeleteUser(db, flags.username);
+      case "list-providers":
+        return cmdListProviders(db);
+      case "add-provider":
+        return cmdAddProvider(db, flags);
+      case "remove-provider":
+        return cmdRemoveProvider(db, flags.slug);
       case "--help":
       case "help":
         usage();

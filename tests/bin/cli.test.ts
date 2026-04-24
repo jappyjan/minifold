@@ -148,3 +148,79 @@ describe("minifold CLI", () => {
     expect(r.stdout).toMatch(/reset-admin/);
   });
 });
+
+describe("minifold CLI — providers", () => {
+  it("list-providers prints an empty notice when none exist", () => {
+    const r = run(["list-providers"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/no providers/i);
+  });
+
+  it("add-provider creates a local provider and list-providers shows it", () => {
+    const added = run([
+      "add-provider",
+      "--slug",
+      "nas",
+      "--name",
+      "NAS",
+      "--root-path",
+      "/files",
+    ]);
+    expect(added.status).toBe(0);
+    expect(added.stdout).toMatch(/added provider/i);
+
+    const listed = run(["list-providers"]);
+    expect(listed.status).toBe(0);
+    expect(listed.stdout).toContain("nas");
+    expect(listed.stdout).toContain("NAS");
+    expect(listed.stdout).toContain("local");
+  });
+
+  it("add-provider --slug is required", () => {
+    const r = run(["add-provider", "--name", "x", "--root-path", "/x"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.toLowerCase()).toContain("--slug");
+  });
+
+  it("add-provider rejects invalid slugs", () => {
+    const r = run([
+      "add-provider",
+      "--slug",
+      "Bad Slug!",
+      "--name",
+      "x",
+      "--root-path",
+      "/x",
+    ]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.toLowerCase()).toContain("slug");
+  });
+
+  it("add-provider rejects duplicate slug", () => {
+    run(["add-provider", "--slug", "nas", "--name", "NAS", "--root-path", "/files"]);
+    const second = run([
+      "add-provider",
+      "--slug",
+      "nas",
+      "--name",
+      "NAS2",
+      "--root-path",
+      "/other",
+    ]);
+    expect(second.status).not.toBe(0);
+    expect(second.stderr.toLowerCase()).toMatch(/exists|unique/);
+  });
+
+  it("remove-provider deletes it", () => {
+    run(["add-provider", "--slug", "nas", "--name", "NAS", "--root-path", "/files"]);
+    const removed = run(["remove-provider", "--slug", "nas"]);
+    expect(removed.status).toBe(0);
+    expect(run(["list-providers"]).stdout).toMatch(/no providers/i);
+  });
+
+  it("remove-provider on unknown slug fails", () => {
+    const r = run(["remove-provider", "--slug", "nope"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.toLowerCase()).toContain("no such provider");
+  });
+});
