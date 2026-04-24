@@ -67,7 +67,7 @@ Volumes:
 
 On first boot, if the DB contains no admin user, the app intercepts all routes and serves a setup wizard instead of the normal UI. Steps:
 
-1. **Create admin account** — name, email, password
+1. **Create admin account** — name, username, password
 2. **Add first storage provider** — name, type (local / S3), type-specific config
 3. **Set access default** — public / signed-in / private
 
@@ -296,7 +296,7 @@ Right-click (desktop) or long-press (mobile) on any file or folder → "Set acce
 - **Roles:** `admin` and `user`
 - Admin creates accounts (no self-registration by default, toggleable)
 - First login after creation: forced password change
-- Admin UI (sidebar → Admin → Users): table with name, email, role, last login, status; add / deactivate / delete
+- Admin UI (sidebar → Admin → Users): table with name, username, role, last login, status; add / deactivate / delete
 
 ---
 
@@ -390,7 +390,7 @@ README includes a **Deploy to Render** badge.
 CREATE TABLE users (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
-  email       TEXT UNIQUE NOT NULL,
+  username    TEXT UNIQUE NOT NULL,
   password    TEXT NOT NULL,           -- bcrypt hash
   role        TEXT NOT NULL DEFAULT 'user',  -- 'admin' | 'user'
   must_change_password INTEGER DEFAULT 1,

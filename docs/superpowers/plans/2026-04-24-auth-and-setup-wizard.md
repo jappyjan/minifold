@@ -6,7 +6,7 @@
 
 **Goal:** A fresh Minifold deployment intercepts all requests and serves a setup wizard that creates the first admin. After that, users can log in, receive a DB-backed session cookie, and are signed out cleanly via logout or by an admin revoking their session. Any authenticated request extends the session's expiry, rolling it forward for 30 days. An admin CLI bundled in the image lets operators recover access (reset password, promote/demote, list users) via `docker exec` without touching SQL.
 
-**Architecture:** No NextAuth. We roll a minimal, proper session layer: on login, a cryptographically-random 32-byte token is generated. The SHA-256 of that token is stored in a `sessions` table alongside `user_id`, `expires_at`, `created_at`, `last_seen_at`. The raw token is set as an `httpOnly`, `SameSite=Lax`, `Secure` (prod) cookie on the client. On every request, middleware reads the cookie, hashes it, looks up the session, checks expiry, loads the user, extends the session if the last-seen-at is older than 1 hour. Logout deletes the row. Changing a password or deleting a user deletes all their sessions. Passwords are hashed with `bcryptjs` (pure JS — no native build). The admin CLI is a small Node script at `bin/cli.mjs`, bundled into the Docker image and wrapped by a `/usr/local/bin/minifold` shim, so operators run `minifold reset-admin --email …` inside the container.
+**Architecture:** No NextAuth. We roll a minimal, proper session layer: on login, a cryptographically-random 32-byte token is generated. The SHA-256 of that token is stored in a `sessions` table alongside `user_id`, `expires_at`, `created_at`, `last_seen_at`. The raw token is set as an `httpOnly`, `SameSite=Lax`, `Secure` (prod) cookie on the client. On every request, middleware reads the cookie, hashes it, looks up the session, checks expiry, loads the user, extends the session if the last-seen-at is older than 1 hour. Logout deletes the row. Changing a password or deleting a user deletes all their sessions. Passwords are hashed with `bcryptjs` (pure JS — no native build). The admin CLI is a small Node script at `bin/cli.mjs`, bundled into the Docker image and wrapped by a `/usr/local/bin/minifold` shim, so operators run `minifold reset-admin --username …` inside the container.
 
 **Tech Stack:**
 - `bcryptjs@^2` + `@types/bcryptjs` — password hashing
@@ -121,7 +121,7 @@ Create `src/server/db/migrations/002_auth.sql`:
 CREATE TABLE users (
   id                   TEXT PRIMARY KEY,
   name                 TEXT NOT NULL,
-  email                TEXT NOT NULL UNIQUE,
+  username             TEXT NOT NULL UNIQUE,
   password             TEXT NOT NULL,
   role                 TEXT NOT NULL DEFAULT 'user',
   must_change_password INTEGER NOT NULL DEFAULT 1,
@@ -130,7 +130,7 @@ CREATE TABLE users (
   last_login           INTEGER
 );
 
-CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_username ON users(username);
 
 CREATE TABLE sessions (
   id            TEXT PRIMARY KEY,
@@ -168,7 +168,7 @@ it("applies 002_auth and creates users + sessions tables", () => {
     [
       "created_at",
       "deactivated",
-      "email",
+      "username",
       "id",
       "last_login",
       "must_change_password",
@@ -307,7 +307,7 @@ import { runMigrations } from "@/server/db/migrate";
 import {
   createUser,
   deleteUser,
-  findUserByEmail,
+  findUserByUsername,
   findUserById,
   hasAnyAdmin,
   listUsers,
@@ -336,18 +336,18 @@ describe("users repository", () => {
     expect(hasAnyAdmin(db)).toBe(false);
   });
 
-  it("createUser inserts and findUserByEmail retrieves (case-insensitive)", () => {
+  it("createUser inserts and findUserByUsername retrieves (case-insensitive)", () => {
     const created = createUser(db, {
       name: "Jane",
-      email: "Jane@Example.com",
+      username: "Jane",
       passwordHash: "$2a$12$xyz",
       role: "admin",
       mustChangePassword: false,
     });
     expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(created.email).toBe("jane@example.com");
+    expect(created.username).toBe("jane");
 
-    const found: UserRow | null = findUserByEmail(db, "JANE@example.COM");
+    const found: UserRow | null = findUserByUsername(db, "JANE");
     expect(found?.id).toBe(created.id);
     expect(found?.role).toBe("admin");
     expect(found?.must_change_password).toBe(0);
@@ -356,7 +356,7 @@ describe("users repository", () => {
   it("hasAnyAdmin true once an admin exists, false for 'user' role only", () => {
     createUser(db, {
       name: "Bob",
-      email: "bob@example.com",
+      username: "bob",
       passwordHash: "$2a$12$xyz",
       role: "user",
       mustChangePassword: false,
@@ -365,7 +365,7 @@ describe("users repository", () => {
 
     createUser(db, {
       name: "Jane",
-      email: "jane@example.com",
+      username: "jane",
       passwordHash: "$2a$12$xyz",
       role: "admin",
       mustChangePassword: false,
@@ -376,19 +376,19 @@ describe("users repository", () => {
   it("findUserById returns the user or null", () => {
     const created = createUser(db, {
       name: "Jane",
-      email: "jane@example.com",
+      username: "jane",
       passwordHash: "$2a$12$xyz",
       role: "admin",
       mustChangePassword: false,
     });
-    expect(findUserById(db, created.id)?.email).toBe("jane@example.com");
+    expect(findUserById(db, created.id)?.username).toBe("jane");
     expect(findUserById(db, "nonexistent")).toBeNull();
   });
 
   it("setLastLogin updates the timestamp", () => {
     const created = createUser(db, {
       name: "Jane",
-      email: "jane@example.com",
+      username: "jane",
       passwordHash: "$2a$12$xyz",
       role: "admin",
       mustChangePassword: false,
@@ -402,7 +402,7 @@ describe("users repository", () => {
   it("updateUserPassword replaces the hash, sets mustChangePassword", () => {
     const created = createUser(db, {
       name: "Jane",
-      email: "jane@example.com",
+      username: "jane",
       passwordHash: "$2a$12$old",
       role: "user",
       mustChangePassword: true,
@@ -420,7 +420,7 @@ describe("users repository", () => {
   it("updateUserRole swaps role", () => {
     const created = createUser(db, {
       name: "Bob",
-      email: "bob@example.com",
+      username: "bob",
       passwordHash: "$2a$12$xyz",
       role: "user",
       mustChangePassword: false,
@@ -432,7 +432,7 @@ describe("users repository", () => {
   it("deleteUser removes the user", () => {
     const created = createUser(db, {
       name: "Bob",
-      email: "bob@example.com",
+      username: "bob",
       passwordHash: "$2a$12$xyz",
       role: "user",
       mustChangePassword: false,
@@ -444,26 +444,26 @@ describe("users repository", () => {
   it("listUsers returns all users sorted by created_at", () => {
     createUser(db, {
       name: "A",
-      email: "a@x.com",
+      username: "alice",
       passwordHash: "$2a$12$x",
       role: "admin",
       mustChangePassword: false,
     });
     createUser(db, {
       name: "B",
-      email: "b@x.com",
+      username: "charlie",
       passwordHash: "$2a$12$x",
       role: "user",
       mustChangePassword: false,
     });
     const rows = listUsers(db);
-    expect(rows.map((r) => r.email)).toEqual(["a@x.com", "b@x.com"]);
+    expect(rows.map((r) => r.username)).toEqual(["alice", "charlie"]);
   });
 
-  it("createUser rejects duplicate email", () => {
+  it("createUser rejects duplicate username", () => {
     createUser(db, {
       name: "Jane",
-      email: "jane@example.com",
+      username: "jane",
       passwordHash: "$2a$12$xyz",
       role: "admin",
       mustChangePassword: false,
@@ -471,7 +471,7 @@ describe("users repository", () => {
     expect(() =>
       createUser(db, {
         name: "Other",
-        email: "jane@example.com",
+        username: "jane",
         passwordHash: "$2a$12$abc",
         role: "user",
         mustChangePassword: true,
@@ -502,7 +502,7 @@ export type Role = "admin" | "user";
 export type UserRow = {
   id: string;
   name: string;
-  email: string;
+  username: string;
   password: string;
   role: Role;
   must_change_password: 0 | 1;
@@ -513,7 +513,7 @@ export type UserRow = {
 
 export type NewUser = {
   name: string;
-  email: string;
+  username: string;
   passwordHash: string;
   role: Role;
   mustChangePassword: boolean;
@@ -529,12 +529,12 @@ export function createUser(db: Database, input: NewUser): UserRow {
   const id = randomUUID();
   const now = Date.now();
   db.prepare(
-    `INSERT INTO users (id, name, email, password, role, must_change_password, deactivated, created_at, last_login)
-     VALUES (@id, @name, @email, @password, @role, @mcp, 0, @now, NULL)`,
+    `INSERT INTO users (id, name, username, password, role, must_change_password, deactivated, created_at, last_login)
+     VALUES (@id, @name, @username, @password, @role, @mcp, 0, @now, NULL)`,
   ).run({
     id,
     name: input.name,
-    email: input.email.toLowerCase(),
+    username: input.username.toLowerCase(),
     password: input.passwordHash,
     role: input.role,
     mcp: input.mustChangePassword ? 1 : 0,
@@ -545,11 +545,11 @@ export function createUser(db: Database, input: NewUser): UserRow {
   return row;
 }
 
-export function findUserByEmail(db: Database, email: string): UserRow | null {
+export function findUserByUsername(db: Database, username: string): UserRow | null {
   return (
     (db
-      .prepare("SELECT * FROM users WHERE email = ?")
-      .get(email.toLowerCase()) as UserRow | undefined) ?? null
+      .prepare("SELECT * FROM users WHERE username = ?")
+      .get(username.toLowerCase()) as UserRow | undefined) ?? null
   );
 }
 
@@ -644,7 +644,7 @@ beforeEach(() => {
   runMigrations(db, resolve(process.cwd(), "src/server/db/migrations"));
   userId = createUser(db, {
     name: "Jane",
-    email: "jane@example.com",
+    username: "jane",
     passwordHash: "$2a$12$xyz",
     role: "admin",
     mustChangePassword: false,
@@ -845,7 +845,7 @@ beforeEach(() => {
   runMigrations(db, resolve(process.cwd(), "src/server/db/migrations"));
   userId = createUser(db, {
     name: "Jane",
-    email: "jane@example.com",
+    username: "jane",
     passwordHash: "$2a$12$xyz",
     role: "admin",
     mustChangePassword: false,
@@ -869,7 +869,7 @@ describe("session manager", () => {
     const { token } = createSession(db, userId);
     const result = validateSession(db, token);
     expect(result?.user.id).toBe(userId);
-    expect(result?.user.email).toBe("jane@example.com");
+    expect(result?.user.username).toBe("jane");
   });
 
   it("validateSession returns null for garbage tokens", () => {
@@ -1153,13 +1153,16 @@ import { writeSessionCookie } from "@/server/auth/cookies";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required").max(200),
-  email: z.string().email("Invalid email"),
+  username: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9_-]{3,64}$/i, "Username: 3-64 chars, letters/digits/_/- only"),
   password: z.string().min(12, "Password must be at least 12 characters"),
 });
 
 export type SetupFormState = {
   error?: string;
-  fieldErrors?: Partial<Record<"name" | "email" | "password", string>>;
+  fieldErrors?: Partial<Record<"name" | "username" | "password", string>>;
 };
 
 export async function createAdmin(
@@ -1173,13 +1176,13 @@ export async function createAdmin(
 
   const parsed = schema.safeParse({
     name: formData.get("name"),
-    email: formData.get("email"),
+    username: formData.get("username"),
     password: formData.get("password"),
   });
   if (!parsed.success) {
     const fieldErrors: SetupFormState["fieldErrors"] = {};
     for (const issue of parsed.error.issues) {
-      const key = issue.path[0] as "name" | "email" | "password";
+      const key = issue.path[0] as "name" | "username" | "password";
       fieldErrors[key] = issue.message;
     }
     return { fieldErrors };
@@ -1188,7 +1191,7 @@ export async function createAdmin(
   const passwordHash = await hashPassword(parsed.data.password);
   const user = createUser(db, {
     name: parsed.data.name,
-    email: parsed.data.email,
+    username: parsed.data.username,
     passwordHash,
     role: "admin",
     mustChangePassword: false,
@@ -1242,10 +1245,10 @@ vi.mock("@/app/setup/actions", () => ({
 }));
 
 describe("SetupForm", () => {
-  it("renders name, email, password fields + submit", () => {
+  it("renders name, username, password fields + submit", () => {
     render(<SetupForm />);
     expect(screen.getByLabelText(/name/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /create admin/i }),
@@ -1256,7 +1259,7 @@ describe("SetupForm", () => {
     const { createAdmin } = await import("@/app/setup/actions");
     render(<SetupForm />);
     await userEvent.type(screen.getByLabelText(/name/i), "Jane");
-    await userEvent.type(screen.getByLabelText(/email/i), "jane@example.com");
+    await userEvent.type(screen.getByLabelText(/username/i), "jane");
     await userEvent.type(
       screen.getByLabelText(/password/i),
       "correct-horse-staple",
@@ -1305,16 +1308,16 @@ export function SetupForm() {
         )}
       </label>
       <label className="flex flex-col gap-1 text-sm">
-        <span>Email</span>
+        <span>Username</span>
         <input
-          name="email"
-          type="email"
+          name="username"
+          type="text"
           required
-          autoComplete="email"
+          autoComplete="username"
           className="rounded border border-neutral-300 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900"
         />
-        {state.fieldErrors?.email && (
-          <span className="text-xs text-red-600">{state.fieldErrors.email}</span>
+        {state.fieldErrors?.username && (
+          <span className="text-xs text-red-600">{state.fieldErrors.username}</span>
         )}
       </label>
       <label className="flex flex-col gap-1 text-sm">
@@ -1468,9 +1471,9 @@ vi.mock("@/app/login/actions", () => ({
 }));
 
 describe("LoginForm", () => {
-  it("renders email + password + submit", () => {
+  it("renders username + password + submit", () => {
     render(<LoginForm />);
-    expect(screen.getByLabelText(/email/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
   });
@@ -1478,7 +1481,7 @@ describe("LoginForm", () => {
   it("submits form values", async () => {
     const { login } = await import("@/app/login/actions");
     render(<LoginForm />);
-    await userEvent.type(screen.getByLabelText(/email/i), "jane@example.com");
+    await userEvent.type(screen.getByLabelText(/username/i), "jane");
     await userEvent.type(screen.getByLabelText(/password/i), "pw");
     await userEvent.click(screen.getByRole("button", { name: /sign in/i }));
     expect(login).toHaveBeenCalled();
@@ -1504,13 +1507,13 @@ Create `src/app/login/actions.ts`:
 import { z } from "zod";
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/server/db";
-import { findUserByEmail, setLastLogin } from "@/server/db/users";
+import { findUserByUsername, setLastLogin } from "@/server/db/users";
 import { verifyPassword } from "@/server/auth/password";
 import { createSession } from "@/server/auth/session";
 import { writeSessionCookie } from "@/server/auth/cookies";
 
 const schema = z.object({
-  email: z.string().email(),
+  username: z.string().trim().min(1),
   password: z.string().min(1),
   callbackUrl: z.string().optional(),
 });
@@ -1522,23 +1525,23 @@ export async function login(
   formData: FormData,
 ): Promise<LoginFormState> {
   const parsed = schema.safeParse({
-    email: formData.get("email"),
+    username: formData.get("username"),
     password: formData.get("password"),
     callbackUrl: formData.get("callbackUrl"),
   });
   if (!parsed.success) {
-    return { error: "Please enter a valid email and password." };
+    return { error: "Please enter a valid username and password." };
   }
 
   const db = getDatabase();
-  const user = findUserByEmail(db, parsed.data.email);
+  const user = findUserByUsername(db, parsed.data.username);
   if (!user || user.deactivated === 1) {
-    return { error: "Invalid email or password." };
+    return { error: "Invalid username or password." };
   }
 
   const ok = await verifyPassword(parsed.data.password, user.password);
   if (!ok) {
-    return { error: "Invalid email or password." };
+    return { error: "Invalid username or password." };
   }
 
   setLastLogin(db, user.id);
@@ -1574,12 +1577,12 @@ export function LoginForm({ callbackUrl }: { callbackUrl?: string }) {
         <input type="hidden" name="callbackUrl" value={callbackUrl} />
       )}
       <label className="flex flex-col gap-1 text-sm">
-        <span>Email</span>
+        <span>Username</span>
         <input
-          name="email"
-          type="email"
+          name="username"
+          type="text"
           required
-          autoComplete="email"
+          autoComplete="username"
           className="rounded border border-neutral-300 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900"
         />
       </label>
@@ -1772,7 +1775,7 @@ describe("Sidebar", () => {
     vi.mocked(getCurrentUser).mockResolvedValueOnce({
       id: "u1",
       name: "Jane",
-      email: "jane@example.com",
+      username: "jane",
       password: "$hash",
       role: "admin",
       must_change_password: 0,
@@ -1811,11 +1814,11 @@ git commit -m "feat(auth): add logout + session-aware sidebar"
 **Files:** Create `bin/cli.mjs` + `tests/bin/cli.test.ts`.
 
 Commands:
-- `minifold list-users` — print a table of id / email / role / deactivated / last-login
-- `minifold reset-admin --email <email>` — generate a random password, update the user's hash, print the new password to stdout so the operator can copy it. If the user doesn't exist or isn't an admin, set `role='admin'` too. Also deletes all the user's sessions.
-- `minifold promote --email <email>` — make the user an admin
-- `minifold demote --email <email>` — revoke admin, ensure at least one admin remains
-- `minifold delete-user --email <email>` — delete the user (cascades to sessions)
+- `minifold list-users` — print a table of id / username / role / deactivated / last-login
+- `minifold reset-admin --username <username>` — generate a random password, update the user's hash, print the new password to stdout so the operator can copy it. If the user doesn't exist or isn't an admin, set `role='admin'` too. Also deletes all the user's sessions.
+- `minifold promote --username <username>` — make the user an admin
+- `minifold demote --username <username>` — revoke admin, ensure at least one admin remains
+- `minifold delete-user --username <username>` — delete the user (cascades to sessions)
 
 - [ ] **Step 1: Write the failing integration test**
 
@@ -1830,7 +1833,7 @@ import { spawnSync } from "node:child_process";
 import type { Database } from "better-sqlite3";
 import { createDatabase } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { createUser, findUserByEmail } from "@/server/db/users";
+import { createUser, findUserByUsername } from "@/server/db/users";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { createSession } from "@/server/auth/session";
 
@@ -1840,11 +1843,11 @@ let tmp: string;
 let dbPath: string;
 let db: Database;
 
-async function seedAdmin(email: string, plain: string) {
+async function seedAdmin(username: string, plain: string) {
   const hash = await hashPassword(plain);
   return createUser(db, {
     name: "Seed",
-    email,
+    username,
     passwordHash: hash,
     role: "admin",
     mustChangePassword: false,
@@ -1878,24 +1881,24 @@ describe("minifold CLI", () => {
   });
 
   it("list-users prints a table of users", async () => {
-    await seedAdmin("admin@example.com", "original-password");
+    await seedAdmin("admin", "original-password");
     const r = run(["list-users"]);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain("admin@example.com");
+    expect(r.stdout).toContain("admin");
     expect(r.stdout).toContain("admin");
   });
 
   it("reset-admin updates the password, promotes to admin, and prints the new password", async () => {
-    await seedAdmin("admin@example.com", "original-password");
-    createSession(db, findUserByEmail(db, "admin@example.com")!.id);
+    await seedAdmin("admin", "original-password");
+    createSession(db, findUserByUsername(db, "admin")!.id);
 
-    const r = run(["reset-admin", "--email", "admin@example.com"]);
+    const r = run(["reset-admin", "--username", "admin"]);
     expect(r.status).toBe(0);
     const match = r.stdout.match(/New password: (\S+)/);
     expect(match).not.toBeNull();
     const newPassword = match![1];
 
-    const user = findUserByEmail(db, "admin@example.com")!;
+    const user = findUserByUsername(db, "admin")!;
     expect(user.role).toBe("admin");
     expect(user.must_change_password).toBe(1);
     expect(await verifyPassword(newPassword, user.password)).toBe(true);
@@ -1907,11 +1910,11 @@ describe("minifold CLI", () => {
     expect(remaining.n).toBe(0);
   });
 
-  it("reset-admin creates the admin if the email does not exist", () => {
-    const r = run(["reset-admin", "--email", "new@example.com"]);
+  it("reset-admin creates the admin if the username does not exist", () => {
+    const r = run(["reset-admin", "--username", "newadmin"]);
     expect(r.status).toBe(0);
     expect(r.stdout).toMatch(/New password:/);
-    const user = findUserByEmail(db, "new@example.com")!;
+    const user = findUserByUsername(db, "newadmin")!;
     expect(user).toBeDefined();
     expect(user.role).toBe("admin");
   });
@@ -1919,39 +1922,39 @@ describe("minifold CLI", () => {
   it("promote turns a 'user' into 'admin'", async () => {
     createUser(db, {
       name: "Bob",
-      email: "bob@example.com",
+      username: "bob",
       passwordHash: await hashPassword("x"),
       role: "user",
       mustChangePassword: false,
     });
-    const r = run(["promote", "--email", "bob@example.com"]);
+    const r = run(["promote", "--username", "bob"]);
     expect(r.status).toBe(0);
-    expect(findUserByEmail(db, "bob@example.com")?.role).toBe("admin");
+    expect(findUserByUsername(db, "bob")?.role).toBe("admin");
   });
 
   it("demote refuses to remove the last admin", async () => {
-    await seedAdmin("admin@example.com", "pw");
-    const r = run(["demote", "--email", "admin@example.com"]);
+    await seedAdmin("admin", "pw");
+    const r = run(["demote", "--username", "admin"]);
     expect(r.status).not.toBe(0);
     expect(r.stderr.toLowerCase()).toContain("last admin");
-    expect(findUserByEmail(db, "admin@example.com")?.role).toBe("admin");
+    expect(findUserByUsername(db, "admin")?.role).toBe("admin");
   });
 
   it("demote works when another admin exists", async () => {
-    await seedAdmin("a@example.com", "pw");
-    await seedAdmin("b@example.com", "pw");
-    const r = run(["demote", "--email", "b@example.com"]);
+    await seedAdmin("alice", "pw");
+    await seedAdmin("charlie", "pw");
+    const r = run(["demote", "--username", "charlie"]);
     expect(r.status).toBe(0);
-    expect(findUserByEmail(db, "b@example.com")?.role).toBe("user");
+    expect(findUserByUsername(db, "charlie")?.role).toBe("user");
   });
 
   it("delete-user removes the user and cascades sessions", async () => {
-    const u = await seedAdmin("a@example.com", "pw");
-    await seedAdmin("b@example.com", "pw");
+    const u = await seedAdmin("alice", "pw");
+    await seedAdmin("charlie", "pw");
     createSession(db, u.id);
-    const r = run(["delete-user", "--email", "a@example.com"]);
+    const r = run(["delete-user", "--username", "alice"]);
     expect(r.status).toBe(0);
-    expect(findUserByEmail(db, "a@example.com")).toBeNull();
+    expect(findUserByUsername(db, "alice")).toBeNull();
     const n = db
       .prepare("SELECT COUNT(*) as n FROM sessions WHERE user_id = ?")
       .get(u.id) as { n: number };
@@ -1959,11 +1962,11 @@ describe("minifold CLI", () => {
   });
 
   it("delete-user refuses to delete the last admin", async () => {
-    await seedAdmin("a@example.com", "pw");
-    const r = run(["delete-user", "--email", "a@example.com"]);
+    await seedAdmin("alice", "pw");
+    const r = run(["delete-user", "--username", "alice"]);
     expect(r.status).not.toBe(0);
     expect(r.stderr.toLowerCase()).toContain("last admin");
-    expect(findUserByEmail(db, "a@example.com")).not.toBeNull();
+    expect(findUserByUsername(db, "alice")).not.toBeNull();
   });
 
   it("prints help when invoked with no args", () => {
@@ -2011,10 +2014,10 @@ function usage() {
 
 Commands:
   list-users                              List all users.
-  reset-admin   --email <email>           Reset the password for an admin user (creates one if missing).
-  promote       --email <email>           Promote a user to admin.
-  demote        --email <email>           Demote an admin to user (refuses if last admin).
-  delete-user   --email <email>           Delete a user (refuses if last admin).
+  reset-admin   --username <username>           Reset the password for an admin user (creates one if missing).
+  promote       --username <username>           Promote a user to admin.
+  demote        --username <username>           Demote an admin to user (refuses if last admin).
+  delete-user   --username <username>           Delete a user (refuses if last admin).
 
 Environment:
   DATABASE_PATH   Path to the SQLite DB. Defaults to /app/data/minifold.db in the image,
@@ -2045,10 +2048,10 @@ function randomPassword() {
   return randomBytes(18).toString("base64url");
 }
 
-function findByEmail(db, email) {
+function findByUsername(db, username) {
   return db
-    .prepare("SELECT * FROM users WHERE email = ?")
-    .get(email.toLowerCase());
+    .prepare("SELECT * FROM users WHERE username = ?")
+    .get(username.toLowerCase());
 }
 
 function countAdmins(db) {
@@ -2060,19 +2063,19 @@ function countAdmins(db) {
 
 function cmdListUsers(db) {
   const rows = db
-    .prepare("SELECT id, email, role, deactivated, last_login FROM users ORDER BY created_at")
+    .prepare("SELECT id, username, role, deactivated, last_login FROM users ORDER BY created_at")
     .all();
   if (rows.length === 0) {
     console.log("No users.");
     return 0;
   }
   console.log(
-    ["EMAIL", "ROLE", "DEACTIVATED", "LAST_LOGIN", "ID"].join("\t"),
+    ["USERNAME", "ROLE", "DEACTIVATED", "LAST_LOGIN", "ID"].join("\t"),
   );
   for (const r of rows) {
     console.log(
       [
-        r.email,
+        r.username,
         r.role,
         r.deactivated ? "yes" : "no",
         r.last_login ? new Date(r.last_login).toISOString() : "-",
@@ -2083,14 +2086,14 @@ function cmdListUsers(db) {
   return 0;
 }
 
-async function cmdResetAdmin(db, email) {
-  if (!email) {
-    console.error("--email is required");
+async function cmdResetAdmin(db, username) {
+  if (!username) {
+    console.error("--username is required");
     return 2;
   }
   const newPassword = randomPassword();
   const hash = await bcrypt.hash(newPassword, BCRYPT_COST);
-  const existing = findByEmail(db, email);
+  const existing = findByUsername(db, username);
   if (existing) {
     db.prepare(
       "UPDATE users SET password = ?, role = 'admin', must_change_password = 1, deactivated = 0 WHERE id = ?",
@@ -2102,43 +2105,43 @@ async function cmdResetAdmin(db, email) {
       "$1-$2-$3-$4-$5",
     );
     db.prepare(
-      `INSERT INTO users (id, name, email, password, role, must_change_password, deactivated, created_at, last_login)
+      `INSERT INTO users (id, name, username, password, role, must_change_password, deactivated, created_at, last_login)
        VALUES (?, ?, ?, ?, 'admin', 1, 0, ?, NULL)`,
-    ).run(id, email.split("@")[0], email.toLowerCase(), hash, Date.now());
+    ).run(id, username.toLowerCase(), username.toLowerCase(), hash, Date.now());
   }
-  console.log(`Admin email:  ${email.toLowerCase()}`);
+  console.log(`Admin username:  ${username.toLowerCase()}`);
   console.log(`New password: ${newPassword}`);
   console.log("(The user will be asked to change this on next login.)");
   return 0;
 }
 
-function cmdPromote(db, email) {
-  if (!email) {
-    console.error("--email is required");
+function cmdPromote(db, username) {
+  if (!username) {
+    console.error("--username is required");
     return 2;
   }
-  const user = findByEmail(db, email);
+  const user = findByUsername(db, username);
   if (!user) {
-    console.error(`No such user: ${email}`);
+    console.error(`No such user: ${username}`);
     return 1;
   }
   db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
-  console.log(`${email} is now an admin.`);
+  console.log(`${username} is now an admin.`);
   return 0;
 }
 
-function cmdDemote(db, email) {
-  if (!email) {
-    console.error("--email is required");
+function cmdDemote(db, username) {
+  if (!username) {
+    console.error("--username is required");
     return 2;
   }
-  const user = findByEmail(db, email);
+  const user = findByUsername(db, username);
   if (!user) {
-    console.error(`No such user: ${email}`);
+    console.error(`No such user: ${username}`);
     return 1;
   }
   if (user.role !== "admin") {
-    console.log(`${email} is already a non-admin.`);
+    console.log(`${username} is already a non-admin.`);
     return 0;
   }
   if (countAdmins(db) <= 1) {
@@ -2146,18 +2149,18 @@ function cmdDemote(db, email) {
     return 1;
   }
   db.prepare("UPDATE users SET role = 'user' WHERE id = ?").run(user.id);
-  console.log(`${email} is now a regular user.`);
+  console.log(`${username} is now a regular user.`);
   return 0;
 }
 
-function cmdDeleteUser(db, email) {
-  if (!email) {
-    console.error("--email is required");
+function cmdDeleteUser(db, username) {
+  if (!username) {
+    console.error("--username is required");
     return 2;
   }
-  const user = findByEmail(db, email);
+  const user = findByUsername(db, username);
   if (!user) {
-    console.error(`No such user: ${email}`);
+    console.error(`No such user: ${username}`);
     return 1;
   }
   if (user.role === "admin" && countAdmins(db) <= 1) {
@@ -2165,7 +2168,7 @@ function cmdDeleteUser(db, email) {
     return 1;
   }
   db.prepare("DELETE FROM users WHERE id = ?").run(user.id);
-  console.log(`Deleted ${email}.`);
+  console.log(`Deleted ${username}.`);
   return 0;
 }
 
@@ -2182,13 +2185,13 @@ async function main() {
       case "list-users":
         return cmdListUsers(db);
       case "reset-admin":
-        return await cmdResetAdmin(db, flags.email);
+        return await cmdResetAdmin(db, flags.username);
       case "promote":
-        return cmdPromote(db, flags.email);
+        return cmdPromote(db, flags.username);
       case "demote":
-        return cmdDemote(db, flags.email);
+        return cmdDemote(db, flags.username);
       case "delete-user":
-        return cmdDeleteUser(db, flags.email);
+        return cmdDeleteUser(db, flags.username);
       case "--help":
       case "help":
         usage();
@@ -2308,11 +2311,11 @@ sleep 5
 docker exec minifold-cli-smoke minifold list-users
 # Expected: "No users." on the fresh volume
 
-docker exec minifold-cli-smoke minifold reset-admin --email admin@example.com
+docker exec minifold-cli-smoke minifold reset-admin --username admin
 # Expected: outputs a new password
 
 docker exec minifold-cli-smoke minifold list-users
-# Expected: shows admin@example.com as admin
+# Expected: shows admin as admin
 
 docker stop minifold-cli-smoke
 docker volume rm minifold-cli-vol
