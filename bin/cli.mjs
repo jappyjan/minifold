@@ -1,16 +1,45 @@
 #!/usr/bin/env node
-import { resolve } from "node:path";
+import { readFileSync, readdirSync, mkdirSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 
 const BCRYPT_COST = 12;
+const MIGRATIONS_DIR = resolve(process.cwd(), "src/server/db/migrations");
 
 function createDb(path) {
+  mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
+  runMigrations(db, MIGRATIONS_DIR);
   return db;
+}
+
+function runMigrations(db, dir) {
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS schema_migrations (
+       name       TEXT PRIMARY KEY,
+       applied_at INTEGER NOT NULL
+     )`,
+  );
+  const files = readdirSync(dir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
+  const isApplied = db.prepare("SELECT 1 FROM schema_migrations WHERE name = ?");
+  const record = db.prepare(
+    "INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)",
+  );
+  for (const file of files) {
+    if (isApplied.get(file)) continue;
+    const sql = readFileSync(join(dir, file), "utf8");
+    const tx = db.transaction(() => {
+      db.exec(sql);
+      record.run(file, Date.now());
+    });
+    tx();
+  }
 }
 
 function usage() {

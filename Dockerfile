@@ -41,6 +41,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
+COPY --from=build --chown=nextjs:nodejs /app/bin ./bin
+COPY --from=build --chown=nextjs:nodejs /app/src/server/db/migrations ./src/server/db/migrations
+
+# The admin CLI (`bin/cli.mjs`) imports bcryptjs directly (outside webpack's view),
+# so it's not in Next's standalone trace. better-sqlite3 IS already in the trace
+# because the server code uses it. Copy bcryptjs explicitly here so the CLI resolves it.
+COPY --from=build --chown=nextjs:nodejs /app/node_modules/bcryptjs ./node_modules/bcryptjs
+
+RUN printf '#!/bin/sh\nexec node /app/bin/cli.mjs "$@"\n' > /usr/local/bin/minifold \
+ && chmod +x /usr/local/bin/minifold
 
 USER nextjs
 EXPOSE 3000

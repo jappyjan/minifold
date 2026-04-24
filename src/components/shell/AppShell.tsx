@@ -1,18 +1,21 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  sidebar,
+}: {
+  children: ReactNode;
+  sidebar: ReactNode;
+}) {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       {/* Desktop sidebar */}
-      <div className="hidden md:block">
-        <Sidebar />
-      </div>
+      <div className="hidden md:block">{sidebar}</div>
 
       {/* Mobile drawer */}
       {drawerOpen && (
@@ -33,7 +36,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={(e) => e.stopPropagation()}
             role="presentation"
           >
-            <Sidebar />
+            {sidebar}
           </div>
         </div>
       )}
