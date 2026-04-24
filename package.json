@@ -17,11 +17,13 @@
     "@trpc/client": "^11.16.0",
     "@trpc/react-query": "^11.16.0",
     "@trpc/server": "^11.16.0",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^11.10.0",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "superjson": "^2.2.6"
+    "superjson": "^2.2.6",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
@@ -44,7 +46,9 @@
     "vitest": "^4.1.5"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3"]
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
   },
   "packageManager": "pnpm@10.28.2"
 }
