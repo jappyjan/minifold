@@ -5,7 +5,7 @@ import { randomBytes } from "node:crypto";
 import Database from "better-sqlite3";
 import bcrypt from "bcryptjs";
 
-const BCRYPT_COST = 12;
+const BCRYPT_COST = 10;
 const MIGRATIONS_DIR = resolve(process.cwd(), "src/server/db/migrations");
 
 function createDb(path) {

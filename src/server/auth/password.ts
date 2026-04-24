@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 
-const COST = 12;
+const COST = 10;
 
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, COST);
