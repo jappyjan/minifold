@@ -4,14 +4,13 @@
 
 **Spec reference:** [2026-04-23-minifold-design.md §14 Deployment](../specs/2026-04-23-minifold-design.md) — the spec calls for a single GHCR image with Docker compose templates. This phase produces the image publishing pipeline and one live consumer of it.
 
-**Goal:** Every push to `main` runs tests, builds a Docker image, publishes it to GHCR, and redeploys a persistent test instance on Coolify. Broken builds do not deploy. The test instance exposes a public URL where the user can manually verify each deliverable step.
+**Goal:** Every push to `main` runs tests and publishes a fresh Docker image to GHCR. A persistent Coolify test instance pulls that image on demand — triggered manually by the controller (or the user) via `coolify deploy uuid …`. This separation keeps the CI pipeline simple (no shared secrets with the deploy target) and leaves deploy timing under human control.
 
 **Architecture:**
-- GitHub Actions workflow `.github/workflows/ci.yml` runs on push/PR.
+- GitHub Actions workflow `.github/workflows/ci.yml` runs on push/PR. Two jobs only — no deploy step.
   - Job `verify` — installs pnpm deps, runs `pnpm lint && pnpm typecheck && pnpm test && pnpm build` on Ubuntu. Fast, no Docker.
-  - Job `publish` — depends on `verify`, only runs on pushes to `main`. Uses `docker/build-push-action` with GHA layer caching to build the image and push `ghcr.io/jappyjan/minifold:latest` + `:<short-sha>`. Authenticates via `GITHUB_TOKEN`.
-  - Job `deploy` — depends on `publish`, curls the Coolify deploy webhook. No-ops cleanly if the webhook secret is missing (informative skip, not failure).
-- Coolify setup done once via CLI (this plan's task 4–5):
+  - Job `publish` — depends on `verify`, only runs on pushes to `main`. Uses `docker/build-push-action` with GHA layer caching to build the image and push `ghcr.io/jappyjan/minifold:latest` + `:<short-sha>`. Authenticates via `GITHUB_TOKEN`. No Coolify secrets are stored in GitHub.
+- Coolify setup done once via CLI (this plan's tasks 4–5):
   - Project: `Minifold`
   - Environment: `production`
   - Application: `minifold-test`, type `dockerimage`, source `ghcr.io/jappyjan/minifold:latest`
@@ -20,7 +19,7 @@
   - Persistent volume: `/app/data` so the SQLite DB survives redeploys
   - Health-check path: `/`
   - Domain: auto-assigned by Coolify's Traefik (can be customised later)
-- The Coolify deploy webhook URL is stored as GitHub repository secret `COOLIFY_WEBHOOK_URL` so CI can trigger a pull + restart after each image push.
+- Redeploys are manual: `coolify deploy uuid kl2kjsmt42md6ct7zt4g9wsk` (or the web UI). The controller runs this after confirming CI published a new image.
 
 **Tech:**
 - GitHub Actions (native)
@@ -332,114 +331,76 @@ Expected: `HOME_OK` and `TRPC_OK`. Record `APP_URL` to the same memory file crea
 
 ---
 
-## Task 6: Wire the CI `deploy` job to trigger Coolify on image push
+## Task 6: Document the manual redeploy procedure
 
-- [ ] **Step 1: Obtain Coolify's deploy webhook URL for the app**
+No GitHub-side wiring. The test instance is redeployed manually whenever we want to verify a pushed change live. GitHub Actions' responsibility ends at publishing the image; Coolify's responsibility starts at pulling it.
 
-Coolify exposes a redeploy endpoint per app. Try:
+- [ ] **Step 1: Confirm the manual redeploy flow**
 
-```bash
-coolify app get "$APP_UUID" --format json -s | jq -r '.deploy_webhook // .webhook_url // .webhooks // empty'
-```
-
-If that field isn't populated, check Coolify's web UI for the app's "Webhooks" or "Deploy Webhooks" section and copy the URL (format: `https://<coolify-host>/api/v1/deploy?uuid=<app-uuid>&force=true`).
-
-Alternative pattern accepted by Coolify 4.x: `curl -X GET -H "Authorization: Bearer <TOKEN>" https://<coolify-host>/api/v1/deploy?uuid=<app-uuid>`. If that's the endpoint, we'll store the token in the secret instead of a single URL.
-
-- [ ] **Step 2: Store the webhook URL + token as GitHub secrets**
-
-Using the `gh` CLI authenticated as `jappyjan`:
+After a commit is pushed and CI finishes publishing the image:
 
 ```bash
-gh secret set COOLIFY_WEBHOOK_URL --repo JappyJan/minifold --body "<URL from step 1>"
-gh secret set COOLIFY_API_TOKEN --repo JappyJan/minifold --body "<token>"
+# 1. Verify the image tag for the commit is on GHCR (optional sanity check):
+gh run view --log $(gh run list --limit 1 --json databaseId -q '.[0].databaseId') | grep -E "digest|Tag"
+
+# 2. Trigger a Coolify redeploy (will pull the fresh :latest):
+coolify deploy uuid kl2kjsmt42md6ct7zt4g9wsk
+
+# 3. Wait for healthy:
+for i in {1..60}; do
+  s=$(coolify app get kl2kjsmt42md6ct7zt4g9wsk --format json | jq -r .status)
+  echo "$s"
+  [[ "$s" == "running:healthy" ]] && break
+  sleep 5
+done
+
+# 4. Smoke-test the URL:
+curl -sf http://kl2kjsmt42md6ct7zt4g9wsk.202.61.192.119.sslip.io/ > /dev/null && echo OK
 ```
 
-The token is the same one stored in the `selfhosted` Coolify context. Retrieve it:
+The UUID and URL are recorded in project memory (`reference_coolify.md`) so future sessions can replay this procedure without rediscovery.
+
+- [ ] **Step 2: (Already done in Task 5) Verify the reference_coolify.md memory file exists**
 
 ```bash
-coolify context get selfhosted -s --format json | jq -r .token
+ls /Users/jappy/.claude/projects/-Users-jappy-code-jappyjan-minifold/memory/reference_coolify.md
 ```
-
-- [ ] **Step 3: Extend `ci.yml` with a `deploy` job**
-
-Append after the `publish` job:
-
-```yaml
-  deploy:
-    name: Trigger Coolify redeploy
-    needs: publish
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Call Coolify deploy webhook
-        env:
-          WEBHOOK_URL: ${{ secrets.COOLIFY_WEBHOOK_URL }}
-          COOLIFY_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
-        run: |
-          if [ -z "$WEBHOOK_URL" ]; then
-            echo "COOLIFY_WEBHOOK_URL not set — skipping deploy"
-            exit 0
-          fi
-          curl -fsS -X GET \
-            -H "Authorization: Bearer $COOLIFY_TOKEN" \
-            "$WEBHOOK_URL"
-```
-
-- [ ] **Step 4: Commit + push**
-
-```bash
-git add .github/workflows/ci.yml
-git commit -m "ci: trigger Coolify redeploy after image publish"
-git push origin main
-```
-
-- [ ] **Step 5: Watch the run; confirm deploy triggered**
-
-```bash
-gh run watch --exit-status
-```
-
-After the run, check Coolify:
-
-```bash
-coolify app logs "$APP_UUID" | tail -20
-```
-
-Expected: fresh deployment logs showing the new image pulled.
 
 ---
 
 ## Task 7: End-to-end smoke test
 
+Prove the full loop: commit → CI verify → image published → manual Coolify deploy → change visible on live URL.
+
 - [ ] **Step 1: Make a trivial user-visible change**
 
 Edit `src/app/page.tsx` — change `"Welcome to Minifold."` to `"Welcome to Minifold — test deploy."` (or any observable tweak).
 
-- [ ] **Step 2: Run tests, commit, push**
+- [ ] **Step 2: Run tests locally, commit, push**
 
 ```bash
 pnpm test
 git add src/app/page.tsx
-git commit -m "chore: verify CI/CD pipeline by updating welcome text"
+git commit -m "chore: smoke-test CI/CD pipeline by updating welcome text"
 git push origin main
 ```
 
-- [ ] **Step 3: Watch the full pipeline end-to-end**
+- [ ] **Step 3: Watch CI**
 
 ```bash
 gh run watch --exit-status
 ```
 
-Expected: `verify` + `publish` + `deploy` all succeed.
+Expected: `verify` + `publish` both succeed. No deploy job.
 
-- [ ] **Step 4: Wait for Coolify to roll the new image**
+- [ ] **Step 4: Manually trigger Coolify redeploy**
 
 ```bash
+coolify deploy uuid kl2kjsmt42md6ct7zt4g9wsk
 for i in {1..60}; do
-  status=$(coolify app get "$APP_UUID" --format json | jq -r .status)
-  echo "status: $status"
-  [[ "$status" == "running:healthy" ]] && break
+  s=$(coolify app get kl2kjsmt42md6ct7zt4g9wsk --format json | jq -r .status)
+  echo "[$i] $s"
+  [[ "$s" == "running:healthy" ]] && break
   sleep 5
 done
 ```
@@ -447,6 +408,7 @@ done
 - [ ] **Step 5: Curl the live URL and confirm the new copy**
 
 ```bash
+APP_URL=http://kl2kjsmt42md6ct7zt4g9wsk.202.61.192.119.sslip.io
 curl -s "$APP_URL/" | grep -q "test deploy" && echo DEPLOYED
 ```
 
@@ -457,23 +419,23 @@ Expected: `DEPLOYED`.
 ```bash
 git revert HEAD --no-edit
 git push origin main
+gh run watch --exit-status
+coolify deploy uuid kl2kjsmt42md6ct7zt4g9wsk
 ```
 
-Watch the pipeline once more — this second round proves the pipeline handles consecutive deploys cleanly.
-
-Expected: final deployed page shows `"Welcome to Minifold."` again.
+Verify the welcome text is back to `"Welcome to Minifold."` on the live URL. This second round proves repeated deploys remain stable.
 
 ---
 
 ## Phase 1.5 exit criteria
 
-- ✅ `.github/workflows/ci.yml` exists and runs all three jobs on push to main.
+- ✅ `.github/workflows/ci.yml` exists with `verify` + `publish` jobs (no deploy job).
 - ✅ `ghcr.io/jappyjan/minifold:latest` + `:<short-sha>` are published on every main push.
-- ✅ GHCR package is public.
+- ✅ GHCR package is publicly pullable.
 - ✅ Coolify project `Minifold` + app `minifold-test` exist; persistent volume mounted at `/app/data`.
-- ✅ `COOLIFY_WEBHOOK_URL` + `COOLIFY_API_TOKEN` stored as GitHub repo secrets.
+- ✅ No Coolify credentials in GitHub secrets (CI knows nothing about the deploy target).
 - ✅ `APP_URL` recorded in memory; hitting it returns "Welcome to Minifold" and a working tRPC health endpoint.
-- ✅ A trivial user-visible change pushed to main appears on the test URL within ~2 minutes of push.
+- ✅ The controller or user can run `coolify deploy uuid kl2kjsmt42md6ct7zt4g9wsk` after a push to bring the test instance up to date.
 
 ## Self-review notes
 
