@@ -28,4 +28,49 @@ describe("bundled migrations", () => {
     }>;
     expect(cols.map((c) => c.name).sort()).toEqual(["key", "value"]);
   });
+
+  it("applies 002_auth and creates users + sessions tables", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "minifold-init-"));
+    const db = createDatabase(join(tmp, "test.db"));
+    cleanup = () => {
+      db.close();
+      rmSync(tmp, { recursive: true, force: true });
+    };
+
+    const dir = resolve(process.cwd(), "src/server/db/migrations");
+    runMigrations(db, dir);
+
+    const userCols = db.prepare("PRAGMA table_info(users)").all() as Array<{
+      name: string;
+    }>;
+    expect(userCols.map((c) => c.name).sort()).toEqual(
+      [
+        "created_at",
+        "deactivated",
+        "username",
+        "id",
+        "last_login",
+        "must_change_password",
+        "name",
+        "password",
+        "role",
+      ].sort(),
+    );
+
+    const sessionCols = db
+      .prepare("PRAGMA table_info(sessions)")
+      .all() as Array<{
+      name: string;
+    }>;
+    expect(sessionCols.map((c) => c.name).sort()).toEqual(
+      [
+        "created_at",
+        "expires_at",
+        "id",
+        "last_seen_at",
+        "token_hash",
+        "user_id",
+      ].sort(),
+    );
+  });
 });
