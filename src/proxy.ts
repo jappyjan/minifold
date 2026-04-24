@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getDatabase } from "@/server/db";
 import { hasAnyAdmin } from "@/server/db/users";
+import { hasAnyProvider } from "@/server/db/providers";
 import { validateSession } from "@/server/auth/session";
 import { SESSION_COOKIE } from "@/server/auth/cookies";
 
@@ -14,15 +15,13 @@ export default async function proxy(req: NextRequest) {
   }
 
   const db = getDatabase();
-  const adminExists = hasAnyAdmin(db);
+  const setupComplete = hasAnyAdmin(db) && hasAnyProvider(db);
 
-  // Before any admin exists: force everyone to the setup wizard.
-  if (!adminExists) {
+  if (!setupComplete) {
     if (pathname === "/setup") return NextResponse.next();
     return NextResponse.redirect(new URL("/setup", req.url));
   }
 
-  // After setup: /setup is gone for good.
   if (pathname === "/setup") {
     return NextResponse.redirect(new URL("/", req.url));
   }
