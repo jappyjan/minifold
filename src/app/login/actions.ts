@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/server/db";
 import { findUserByUsername, setLastLogin } from "@/server/db/users";
@@ -48,5 +49,6 @@ export async function login(
     parsed.data.callbackUrl && parsed.data.callbackUrl.startsWith("/")
       ? parsed.data.callbackUrl
       : "/";
+  revalidatePath("/", "layout");
   redirect(dest);
 }

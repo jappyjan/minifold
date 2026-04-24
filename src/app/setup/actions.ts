@@ -1,6 +1,7 @@
 "use server";
 
 import { z } from "zod";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/server/db";
 import { createUser, hasAnyAdmin } from "@/server/db/users";
@@ -62,6 +63,7 @@ export async function createAdmin(
 
   const { token, expiresAt } = createSession(db, user.id);
   await writeSessionCookie(token, expiresAt);
+  revalidatePath("/", "layout");
   redirect("/");
 }
 
@@ -123,5 +125,6 @@ export async function createFirstProvider(
     config: { rootPath: parsed.data.rootPath },
   });
 
+  revalidatePath("/", "layout");
   redirect("/");
 }
