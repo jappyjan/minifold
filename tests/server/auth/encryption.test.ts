@@ -56,7 +56,10 @@ describe("encryption", () => {
   it("decryptJSON throws on tampered ciphertext", () => {
     const cipher = encryptJSON(db, { x: 1 });
     const parts = cipher.split(":");
-    const tampered = `${parts[0]}:${parts[1]}:${parts[2]!.replace(/^./, "0")}`;
+    // Flip the first hex char of the ciphertext to a guaranteed-different value.
+    const firstChar = parts[2]![0]!;
+    const flippedChar = firstChar === "0" ? "1" : "0";
+    const tampered = `${parts[0]}:${parts[1]}:${flippedChar}${parts[2]!.slice(1)}`;
     expect(() => decryptJSON(db, tampered)).toThrow();
   });
 
