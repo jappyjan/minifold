@@ -4,7 +4,12 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/server/db";
 import { createUser, hasAnyAdmin } from "@/server/db/users";
-import { createProvider, hasAnyProvider } from "@/server/db/providers";
+import {
+  createProvider,
+  findProviderBySlug,
+  generateUniqueSlug,
+  hasAnyProvider,
+} from "@/server/db/providers";
 import { hashPassword } from "@/server/auth/password";
 import { createSession } from "@/server/auth/session";
 import { writeSessionCookie } from "@/server/auth/cookies";
@@ -61,10 +66,14 @@ export async function createAdmin(
 }
 
 const providerSchema = z.object({
-  slug: z
-    .string()
-    .trim()
-    .regex(/^[a-z0-9-]{1,32}$/i, "Slug: 1-32 chars, letters/digits/- only"),
+  slug: z.preprocess(
+    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    z
+      .string()
+      .trim()
+      .regex(/^[a-z0-9-]{1,32}$/i, "Slug: 1-32 chars, letters/digits/- only")
+      .optional(),
+  ),
   name: z.string().trim().min(1, "Name is required").max(200),
   rootPath: z.string().trim().min(1, "Root path is required"),
 });
@@ -97,8 +106,18 @@ export async function createFirstProvider(
     return { fieldErrors };
   }
 
+  let slug: string;
+  if (parsed.data.slug) {
+    if (findProviderBySlug(db, parsed.data.slug)) {
+      return { fieldErrors: { slug: "Slug already in use" } };
+    }
+    slug = parsed.data.slug;
+  } else {
+    slug = generateUniqueSlug(db, parsed.data.name);
+  }
+
   createProvider(db, {
-    slug: parsed.data.slug,
+    slug,
     name: parsed.data.name,
     type: "local",
     config: { rootPath: parsed.data.rootPath },

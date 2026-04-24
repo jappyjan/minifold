@@ -85,3 +85,27 @@ export function updateProviderPosition(
 export function deleteProvider(db: Database, slug: string): void {
   db.prepare("DELETE FROM providers WHERE slug = ?").run(slug);
 }
+
+export function slugify(name: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+}
+
+export function generateUniqueSlug(db: Database, name: string): string {
+  const base = slugify(name) || "provider";
+  const exists = db.prepare("SELECT 1 FROM providers WHERE slug = ?");
+  if (!exists.get(base)) return base;
+  for (let suffix = 2; suffix <= 999; suffix++) {
+    const tail = `-${suffix}`;
+    const allowed = 32 - tail.length;
+    const trimmed = base.length > allowed ? base.slice(0, allowed) : base;
+    const candidate = `${trimmed}${tail}`;
+    if (!exists.get(candidate)) return candidate;
+  }
+  throw new Error("generateUniqueSlug: too many collisions");
+}

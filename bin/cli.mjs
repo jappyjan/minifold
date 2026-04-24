@@ -107,8 +107,9 @@ User commands:
 
 Provider commands:
   list-providers                          List configured storage providers.
-  add-provider  --slug <s> --name <n> --root-path <p>
-                                          Add a local-FS provider.
+  add-provider  --name <n> --root-path <p> [--slug <s>]
+                                          Add a local-FS provider. Slug auto-
+                                          generated from name if omitted.
   remove-provider --slug <s>              Remove a provider.
 
 Environment:
@@ -285,15 +286,31 @@ function cmdListProviders(db) {
   return 0;
 }
 
+function slugify(name) {
+  return name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 32);
+}
+
+function generateUniqueSlug(db, name) {
+  const base = slugify(name) || "provider";
+  const exists = db.prepare("SELECT 1 FROM providers WHERE slug = ?");
+  if (!exists.get(base)) return base;
+  for (let suffix = 2; suffix <= 999; suffix++) {
+    const tail = `-${suffix}`;
+    const allowed = 32 - tail.length;
+    const trimmed = base.length > allowed ? base.slice(0, allowed) : base;
+    const candidate = `${trimmed}${tail}`;
+    if (!exists.get(candidate)) return candidate;
+  }
+  throw new Error("generateUniqueSlug: too many collisions");
+}
+
 function cmdAddProvider(db, flags) {
-  if (!flags.slug) {
-    console.error("--slug is required");
-    return 2;
-  }
-  if (!SLUG_RE.test(flags.slug)) {
-    console.error("--slug must match /^[a-z0-9-]{1,32}$/i");
-    return 2;
-  }
   if (!flags.name) {
     console.error("--name is required");
     return 2;
@@ -302,12 +319,23 @@ function cmdAddProvider(db, flags) {
     console.error("--root-path is required");
     return 2;
   }
-  const slug = flags.slug.toLowerCase();
-  const existing = db.prepare("SELECT 1 FROM providers WHERE slug = ?").get(slug);
-  if (existing) {
-    console.error(`Provider slug already exists: ${slug}`);
-    return 1;
+
+  let slug;
+  if (flags.slug) {
+    if (!SLUG_RE.test(flags.slug)) {
+      console.error("--slug must match /^[a-z0-9-]{1,32}$/i");
+      return 2;
+    }
+    slug = flags.slug.toLowerCase();
+    const existing = db.prepare("SELECT 1 FROM providers WHERE slug = ?").get(slug);
+    if (existing) {
+      console.error(`Provider slug already exists: ${slug}`);
+      return 1;
+    }
+  } else {
+    slug = generateUniqueSlug(db, flags.name);
   }
+
   const encrypted = encryptJSON(db, { rootPath: flags["root-path"] });
   const now = Date.now();
   db.prepare(

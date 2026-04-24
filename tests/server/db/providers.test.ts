@@ -9,8 +9,10 @@ import {
   createProvider,
   deleteProvider,
   findProviderBySlug,
+  generateUniqueSlug,
   hasAnyProvider,
   listProviders,
+  slugify,
   updateProviderPosition,
   type ProviderRow,
 } from "@/server/db/providers";
@@ -111,5 +113,74 @@ describe("providers repository", () => {
     expect(() =>
       createProvider(db, { slug: "a", name: "A2", type: "local", config: { rootPath: "/b" } }),
     ).toThrow();
+  });
+});
+
+describe("slugify", () => {
+  it("converts a name to lowercase hyphenated", () => {
+    expect(slugify("NAS Files")).toBe("nas-files");
+    expect(slugify("My 3D Prints!")).toBe("my-3d-prints");
+  });
+
+  it("collapses repeated non-alphanumerics into a single hyphen", () => {
+    expect(slugify("a___b   c")).toBe("a-b-c");
+  });
+
+  it("drops leading and trailing hyphens", () => {
+    expect(slugify("  hello  ")).toBe("hello");
+    expect(slugify("!!!hi!!!")).toBe("hi");
+  });
+
+  it("strips diacritics", () => {
+    expect(slugify("café")).toBe("cafe");
+  });
+
+  it("returns empty string for all-non-ASCII input", () => {
+    expect(slugify("日本語")).toBe("");
+  });
+
+  it("truncates to 32 chars", () => {
+    expect(slugify("a".repeat(50))).toHaveLength(32);
+  });
+});
+
+describe("generateUniqueSlug", () => {
+  it("returns the slugified name when there is no collision", () => {
+    expect(generateUniqueSlug(db, "NAS Files")).toBe("nas-files");
+  });
+
+  it("suffixes -2, -3, ... when colliding with existing slugs", () => {
+    createProvider(db, {
+      slug: "nas",
+      name: "NAS",
+      type: "local",
+      config: { rootPath: "/a" },
+    });
+    expect(generateUniqueSlug(db, "nas")).toBe("nas-2");
+
+    createProvider(db, {
+      slug: "nas-2",
+      name: "NAS2",
+      type: "local",
+      config: { rootPath: "/b" },
+    });
+    expect(generateUniqueSlug(db, "nas")).toBe("nas-3");
+  });
+
+  it("falls back to 'provider' when slugify yields empty", () => {
+    expect(generateUniqueSlug(db, "日本語")).toBe("provider");
+  });
+
+  it("trims the base so suffixed slug stays within 32 chars", () => {
+    const long = "a".repeat(40);
+    createProvider(db, {
+      slug: slugify(long),
+      name: "long",
+      type: "local",
+      config: { rootPath: "/a" },
+    });
+    const next = generateUniqueSlug(db, long);
+    expect(next.length).toBeLessThanOrEqual(32);
+    expect(next.endsWith("-2")).toBe(true);
   });
 });

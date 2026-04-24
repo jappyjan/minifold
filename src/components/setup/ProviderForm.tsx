@@ -14,22 +14,6 @@ export function ProviderForm() {
   return (
     <form action={action} className="flex flex-col gap-4">
       <label className="flex flex-col gap-1 text-sm">
-        <span>Slug</span>
-        <span className="text-xs text-neutral-500 dark:text-neutral-400">
-          URL-safe identifier, e.g. &quot;nas&quot; — becomes the first URL segment.
-        </span>
-        <input
-          name="slug"
-          type="text"
-          required
-          className="rounded border border-neutral-300 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900"
-        />
-        {state.fieldErrors?.slug && (
-          <span className="text-xs text-red-600">{state.fieldErrors.slug}</span>
-        )}
-      </label>
-
-      <label className="flex flex-col gap-1 text-sm">
         <span>Name</span>
         <input
           name="name"
@@ -58,6 +42,27 @@ export function ProviderForm() {
           <span className="text-xs text-red-600">{state.fieldErrors.rootPath}</span>
         )}
       </label>
+
+      <details className="rounded border border-neutral-200 px-3 py-2 text-sm open:pb-3 dark:border-neutral-800">
+        <summary className="cursor-pointer text-neutral-600 dark:text-neutral-400">
+          Advanced
+        </summary>
+        <label className="mt-3 flex flex-col gap-1">
+          <span>Slug</span>
+          <span className="text-xs text-neutral-500 dark:text-neutral-400">
+            URL-safe identifier — auto-generated from the name if left blank.
+          </span>
+          <input
+            name="slug"
+            type="text"
+            placeholder="auto"
+            className="rounded border border-neutral-300 bg-white px-3 py-2 dark:border-neutral-700 dark:bg-neutral-900"
+          />
+          {state.fieldErrors?.slug && (
+            <span className="text-xs text-red-600">{state.fieldErrors.slug}</span>
+          )}
+        </label>
+      </details>
 
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
 

@@ -176,10 +176,39 @@ describe("minifold CLI — providers", () => {
     expect(listed.stdout).toContain("local");
   });
 
-  it("add-provider --slug is required", () => {
-    const r = run(["add-provider", "--name", "x", "--root-path", "/x"]);
+  it("add-provider auto-generates a slug when --slug is omitted", () => {
+    const r = run([
+      "add-provider",
+      "--name",
+      "NAS Files",
+      "--root-path",
+      "/files",
+    ]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/nas-files/);
+
+    const listed = run(["list-providers"]);
+    expect(listed.stdout).toContain("nas-files");
+    expect(listed.stdout).toContain("NAS Files");
+  });
+
+  it("add-provider auto-suffixes when the slug derived from name collides", () => {
+    run(["add-provider", "--name", "NAS", "--root-path", "/a"]);
+    const r = run(["add-provider", "--name", "nas", "--root-path", "/b"]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toMatch(/nas-2/);
+  });
+
+  it("add-provider still requires --name", () => {
+    const r = run(["add-provider", "--root-path", "/x"]);
     expect(r.status).not.toBe(0);
-    expect(r.stderr.toLowerCase()).toContain("--slug");
+    expect(r.stderr.toLowerCase()).toContain("--name");
+  });
+
+  it("add-provider still requires --root-path", () => {
+    const r = run(["add-provider", "--name", "x"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.toLowerCase()).toContain("--root-path");
   });
 
   it("add-provider rejects invalid slugs", () => {
