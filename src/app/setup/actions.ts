@@ -69,7 +69,11 @@ export async function createAdmin(
 
 const providerSchema = z.object({
   slug: z.preprocess(
-    (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+    (v) => {
+      if (v == null) return undefined;
+      if (typeof v === "string" && v.trim() === "") return undefined;
+      return v;
+    },
     z
       .string()
       .trim()

@@ -24,7 +24,7 @@ export async function login(
   const parsed = schema.safeParse({
     username: formData.get("username"),
     password: formData.get("password"),
-    callbackUrl: formData.get("callbackUrl"),
+    callbackUrl: formData.get("callbackUrl") ?? undefined,
   });
   if (!parsed.success) {
     return { error: "Please enter a valid username and password." };
