@@ -4,6 +4,7 @@ import { z } from "zod";
 import { redirect } from "next/navigation";
 import { getDatabase } from "@/server/db";
 import { createUser, hasAnyAdmin } from "@/server/db/users";
+import { createProvider, hasAnyProvider } from "@/server/db/providers";
 import { hashPassword } from "@/server/auth/password";
 import { createSession } from "@/server/auth/session";
 import { writeSessionCookie } from "@/server/auth/cookies";
@@ -56,5 +57,52 @@ export async function createAdmin(
 
   const { token, expiresAt } = createSession(db, user.id);
   await writeSessionCookie(token, expiresAt);
+  redirect("/");
+}
+
+const providerSchema = z.object({
+  slug: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9-]{1,32}$/i, "Slug: 1-32 chars, letters/digits/- only"),
+  name: z.string().trim().min(1, "Name is required").max(200),
+  rootPath: z.string().trim().min(1, "Root path is required"),
+});
+
+export type ProviderFormState = {
+  error?: string;
+  fieldErrors?: Partial<Record<"slug" | "name" | "rootPath", string>>;
+};
+
+export async function createFirstProvider(
+  _prev: ProviderFormState,
+  formData: FormData,
+): Promise<ProviderFormState> {
+  const db = getDatabase();
+  if (hasAnyProvider(db)) {
+    return { error: "A provider already exists." };
+  }
+
+  const parsed = providerSchema.safeParse({
+    slug: formData.get("slug"),
+    name: formData.get("name"),
+    rootPath: formData.get("rootPath"),
+  });
+  if (!parsed.success) {
+    const fieldErrors: ProviderFormState["fieldErrors"] = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path[0] as "slug" | "name" | "rootPath";
+      fieldErrors[key] = issue.message;
+    }
+    return { fieldErrors };
+  }
+
+  createProvider(db, {
+    slug: parsed.data.slug,
+    name: parsed.data.name,
+    type: "local",
+    config: { rootPath: parsed.data.rootPath },
+  });
+
   redirect("/");
 }
