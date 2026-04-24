@@ -7,6 +7,8 @@ vi.mock("@/server/auth/current-user", () => ({
   getCurrentUser: vi.fn(async () => null),
 }));
 vi.mock("@/app/logout/actions", () => ({ logout: vi.fn() }));
+vi.mock("@/server/db", () => ({ getDatabase: vi.fn(() => ({})) }));
+vi.mock("@/server/db/providers", () => ({ listProviders: vi.fn(() => []) }));
 
 describe("Sidebar", () => {
   it("renders the app name", async () => {
@@ -39,5 +41,34 @@ describe("Sidebar", () => {
     expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
     expect(screen.getByText("Jane")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
+  });
+
+  it("lists providers when a session exists", async () => {
+    const { getCurrentUser } = await import("@/server/auth/current-user");
+    const { listProviders } = await import("@/server/db/providers");
+    vi.mocked(getCurrentUser).mockResolvedValueOnce({
+      id: "u1",
+      name: "Jane",
+      username: "jane",
+      password: "$hash",
+      role: "admin",
+      must_change_password: 0,
+      deactivated: 0,
+      created_at: Date.now(),
+      last_login: null,
+    });
+    vi.mocked(listProviders).mockReturnValueOnce([
+      {
+        slug: "nas",
+        name: "NAS Files",
+        type: "local",
+        config: { rootPath: "/files" },
+        position: 0,
+        created_at: Date.now(),
+      },
+    ]);
+    const node = await Sidebar();
+    render(node);
+    expect(screen.getByRole("link", { name: /nas files/i })).toBeInTheDocument();
   });
 });
