@@ -2,7 +2,10 @@ import {
   S3Client,
   ListObjectsV2Command,
   HeadObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
 } from "@aws-sdk/client-s3";
+import { Readable } from "node:stream";
 import {
   PathTraversalError,
   NotFoundError,
@@ -37,6 +40,24 @@ export class S3StorageProvider implements StorageProvider {
       ...(opts.endpoint ? { endpoint: opts.endpoint } : {}),
       ...(opts.forcePathStyle ? { forcePathStyle: opts.forcePathStyle } : {}),
     });
+  }
+
+  /**
+   * Normalizes a user-supplied path into an S3 key (no trailing slash).
+   * Used by read and write.
+   */
+  private normalizeKey(path: string): string {
+    const stripped = path.replace(/^\/+/, "");
+    if (stripped === "") {
+      throw new NotFoundError(path);
+    }
+    const segments = stripped.split("/").filter((s) => s.length > 0);
+    for (const segment of segments) {
+      if (segment === "..") {
+        throw new PathTraversalError(path);
+      }
+    }
+    return segments.join("/");
   }
 
   /**
@@ -183,12 +204,36 @@ export class S3StorageProvider implements StorageProvider {
     throw new NotFoundError(path);
   }
 
-  async read(_path: string): Promise<ReadableStream<Uint8Array>> {
-    throw new Error("not implemented");
+  async read(path: string): Promise<ReadableStream<Uint8Array>> {
+    const key = this.normalizeKey(path);
+    try {
+      const resp = await this.client.send(
+        new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      if (!resp.Body) throw new NotFoundError(path);
+      return Readable.toWeb(resp.Body as Readable) as ReadableStream<Uint8Array>;
+    } catch (err: unknown) {
+      if (err instanceof NotFoundError) throw err;
+      const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+      const is404 =
+        e.$metadata?.httpStatusCode === 404 ||
+        e.name === "NoSuchKey" ||
+        e.name === "NotFound";
+      if (is404) throw new NotFoundError(path);
+      throw err;
+    }
   }
 
-  async write(_path: string, _data: Buffer): Promise<void> {
-    throw new Error("not implemented");
+  async write(path: string, data: Buffer): Promise<void> {
+    const key = this.normalizeKey(path);
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: data,
+        ContentLength: data.length,
+      }),
+    );
   }
 
   async exists(path: string): Promise<boolean> {

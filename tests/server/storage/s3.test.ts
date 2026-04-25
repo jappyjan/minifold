@@ -4,8 +4,11 @@ import {
   S3Client,
   ListObjectsV2Command,
   HeadObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import type { S3ServiceException } from "@aws-sdk/client-s3";
+import { Readable } from "node:stream";
 import { S3StorageProvider } from "@/server/storage/s3";
 import { PathTraversalError, NotFoundError } from "@/server/storage/types";
 
@@ -355,5 +358,71 @@ describe("S3StorageProvider.exists", () => {
     await expect(provider.exists("../etc")).rejects.toBeInstanceOf(
       PathTraversalError,
     );
+  });
+});
+
+describe("S3StorageProvider.read", () => {
+  it("returns a ReadableStream whose content matches the mocked S3 body", async () => {
+    const bodyContent = Buffer.from("hello s3");
+    s3Mock.on(GetObjectCommand).resolves({
+      Body: Readable.from([bodyContent]) as any,
+    });
+
+    const provider = makeProvider();
+    const stream = await provider.read("hello.md");
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    const result = Buffer.concat(chunks.map((c) => Buffer.from(c)));
+    expect(result.toString("utf8")).toBe("hello s3");
+  });
+
+  it("throws NotFoundError when GetObjectCommand returns 404", async () => {
+    const notFound = Object.assign(new Error("NoSuchKey"), {
+      name: "NoSuchKey",
+      $metadata: { httpStatusCode: 404 },
+      $fault: "client",
+      $service: "S3",
+    });
+    s3Mock.on(GetObjectCommand).rejects(notFound);
+
+    const provider = makeProvider();
+    await expect(provider.read("missing.txt")).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+  });
+
+  it("throws PathTraversalError for ../secret", async () => {
+    const provider = makeProvider();
+    await expect(provider.read("../secret")).rejects.toBeInstanceOf(
+      PathTraversalError,
+    );
+  });
+});
+
+describe("S3StorageProvider.write", () => {
+  it("calls PutObjectCommand with correct Bucket, Key, and Body", async () => {
+    s3Mock.on(PutObjectCommand).resolves({});
+
+    const provider = makeProvider();
+    await provider.write("output/result.txt", Buffer.from("data"));
+
+    const calls = s3Mock.calls();
+    const putCall = calls.find((c) => c.args[0] instanceof PutObjectCommand);
+    const input = (putCall!.args[0] as PutObjectCommand).input;
+    expect(input.Bucket).toBe("my-bucket");
+    expect(input.Key).toBe("output/result.txt");
+    expect(Buffer.from(input.Body as Buffer).toString()).toBe("data");
+  });
+
+  it("throws PathTraversalError for ../secret", async () => {
+    const provider = makeProvider();
+    await expect(
+      provider.write("../secret", Buffer.from("evil")),
+    ).rejects.toBeInstanceOf(PathTraversalError);
   });
 });
