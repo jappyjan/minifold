@@ -107,23 +107,27 @@ export async function addProvider(
   if ("fieldErrors" in slugResult) return slugResult;
   const { slug } = slugResult;
 
-  if (parsed.data.type === "local") {
-    createProvider(db, {
-      slug,
-      name: parsed.data.name,
-      type: "local",
-      config: { rootPath: parsed.data.rootPath },
-    });
-  } else {
-    const s3Config: S3Config = {
-      bucket: parsed.data.bucket,
-      region: parsed.data.region,
-      accessKeyId: parsed.data.accessKeyId,
-      secretAccessKey: parsed.data.secretAccessKey,
-      endpoint: parsed.data.endpoint,
-      pathStyle: parsed.data.pathStyle,
-    };
-    createProvider(db, { slug, name: parsed.data.name, type: "s3", config: s3Config });
+  try {
+    if (parsed.data.type === "local") {
+      createProvider(db, {
+        slug,
+        name: parsed.data.name,
+        type: "local",
+        config: { rootPath: parsed.data.rootPath },
+      });
+    } else {
+      const s3Config: S3Config = {
+        bucket: parsed.data.bucket,
+        region: parsed.data.region,
+        accessKeyId: parsed.data.accessKeyId,
+        secretAccessKey: parsed.data.secretAccessKey,
+        endpoint: parsed.data.endpoint,
+        pathStyle: parsed.data.pathStyle,
+      };
+      createProvider(db, { slug, name: parsed.data.name, type: "s3", config: s3Config });
+    }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Failed to create provider" };
   }
 
   revalidatePath("/admin/providers");

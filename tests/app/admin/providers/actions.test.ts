@@ -120,6 +120,38 @@ describe("addProvider — S3", () => {
     expect(state.fieldErrors?.region).toBeTruthy();
   });
 
+  it("returns fieldErrors when accessKeyId is empty", async () => {
+    const { addProvider } = await import("@/app/admin/providers/actions");
+    const state = await addProvider(
+      {},
+      makeFormData({
+        type: "s3",
+        name: "B2",
+        bucket: "my-bucket",
+        region: "us-east-1",
+        accessKeyId: "",
+        secretAccessKey: "SECRET",
+      }),
+    );
+    expect(state.fieldErrors?.accessKeyId).toBeTruthy();
+  });
+
+  it("returns fieldErrors when secretAccessKey is empty", async () => {
+    const { addProvider } = await import("@/app/admin/providers/actions");
+    const state = await addProvider(
+      {},
+      makeFormData({
+        type: "s3",
+        name: "B2",
+        bucket: "my-bucket",
+        region: "us-east-1",
+        accessKeyId: "AKID",
+        secretAccessKey: "",
+      }),
+    );
+    expect(state.fieldErrors?.secretAccessKey).toBeTruthy();
+  });
+
   it("creates an S3 provider and returns success", async () => {
     const { addProvider } = await import("@/app/admin/providers/actions");
     const { getDatabase } = await import("@/server/db");
