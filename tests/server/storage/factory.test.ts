@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { providerFromRow } from "@/server/storage/factory";
 import { LocalStorageProvider } from "@/server/storage/local";
+import { S3StorageProvider } from "@/server/storage/s3";
 
 describe("providerFromRow", () => {
   it("returns a LocalStorageProvider for type=local", () => {
@@ -16,23 +17,21 @@ describe("providerFromRow", () => {
     expect(p.slug).toBe("nas");
   });
 
-  it("throws for type=s3 in Phase 3", () => {
-    expect(() =>
-      providerFromRow({
-        slug: "s3",
-        name: "S3",
-        type: "s3",
-        config: {
-          endpoint: "https://s3.example.com",
-          bucket: "x",
-          region: "us-east-1",
-          accessKeyId: "a",
-          secretAccessKey: "b",
-          pathStyle: true,
-        },
-        position: 0,
-        created_at: Date.now(),
-      }),
-    ).toThrow(/s3 provider not yet implemented/i);
+  it("returns an S3StorageProvider for type=s3", () => {
+    const p = providerFromRow({
+      slug: "my-s3",
+      name: "S3",
+      type: "s3",
+      config: {
+        bucket: "my-bucket",
+        region: "us-east-1",
+        accessKeyId: "AKID",
+        secretAccessKey: "SECRET",
+      },
+      position: 0,
+      created_at: Date.now(),
+    });
+    expect(p).toBeInstanceOf(S3StorageProvider);
+    expect(p.slug).toBe("my-s3");
   });
 });
