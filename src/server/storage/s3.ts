@@ -1,5 +1,14 @@
-import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
-import { PathTraversalError, type Entry, type StorageProvider } from "./types";
+import {
+  S3Client,
+  ListObjectsV2Command,
+  HeadObjectCommand,
+} from "@aws-sdk/client-s3";
+import {
+  PathTraversalError,
+  NotFoundError,
+  type Entry,
+  type StorageProvider,
+} from "./types";
 
 type Options = {
   slug: string;
@@ -111,8 +120,67 @@ export class S3StorageProvider implements StorageProvider {
     return entries;
   }
 
-  async stat(_path: string): Promise<Entry> {
-    throw new Error("not implemented");
+  async stat(path: string): Promise<Entry> {
+    // Guard traversal (normalizePrefix will throw PathTraversalError for "..")
+    // We need to derive the S3 key (no trailing slash) and the prefix for dir probe
+    const stripped = path.replace(/^\/+/, "");
+    const segments = stripped === "" ? [] : stripped.split("/").filter((s) => s.length > 0);
+    for (const segment of segments) {
+      if (segment === "..") {
+        throw new PathTraversalError(path);
+      }
+    }
+
+    const key = segments.join("/"); // e.g. "prints/anchor.stl" or "prints"
+    const name = segments[segments.length - 1] ?? "";
+
+    // Try HeadObject first (file probe)
+    try {
+      const resp = await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      const rawEtag = resp.ETag;
+      const etag = rawEtag ? rawEtag.replace(/^"|"$/g, "") : undefined;
+      return {
+        name,
+        type: "file",
+        size: resp.ContentLength ?? 0,
+        modifiedAt: resp.LastModified ?? new Date(0),
+        ...(etag !== undefined ? { etag } : {}),
+      };
+    } catch (err: unknown) {
+      const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
+      const is404 =
+        e.$metadata?.httpStatusCode === 404 ||
+        e.name === "NoSuchKey" ||
+        e.name === "NotFound";
+      if (!is404) throw err;
+    }
+
+    // HeadObject returned 404 — probe for directory via ListObjectsV2
+    const prefix = key === "" ? "" : key + "/";
+    const listResp = await this.client.send(
+      new ListObjectsV2Command({
+        Bucket: this.bucket,
+        Prefix: prefix,
+        MaxKeys: 1,
+      }),
+    );
+
+    const hasContent =
+      (listResp.Contents && listResp.Contents.length > 0) ||
+      (listResp.CommonPrefixes && listResp.CommonPrefixes.length > 0);
+
+    if (hasContent) {
+      return {
+        name,
+        type: "directory",
+        size: 0,
+        modifiedAt: new Date(0),
+      };
+    }
+
+    throw new NotFoundError(path);
   }
 
   async read(_path: string): Promise<ReadableStream<Uint8Array>> {
@@ -123,7 +191,13 @@ export class S3StorageProvider implements StorageProvider {
     throw new Error("not implemented");
   }
 
-  async exists(_path: string): Promise<boolean> {
-    throw new Error("not implemented");
+  async exists(path: string): Promise<boolean> {
+    try {
+      await this.stat(path);
+      return true;
+    } catch (err: unknown) {
+      if (err instanceof NotFoundError) return false;
+      throw err;
+    }
   }
 }

@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { mockClient } from "aws-sdk-client-mock";
-import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  ListObjectsV2Command,
+  HeadObjectCommand,
+} from "@aws-sdk/client-s3";
+import type { S3ServiceException } from "@aws-sdk/client-s3";
 import { S3StorageProvider } from "@/server/storage/s3";
-import { PathTraversalError } from "@/server/storage/types";
+import { PathTraversalError, NotFoundError } from "@/server/storage/types";
 
 const s3Mock = mockClient(S3Client);
 
@@ -223,5 +228,132 @@ describe("S3StorageProvider.list", () => {
     const entries = await provider.list("prints");
     expect(entries).toHaveLength(1);
     expect(entries[0].name).toBe("real-file.txt");
+  });
+});
+
+// Helper to create a 404-like S3 error
+function makeNotFoundError(): S3ServiceException {
+  return Object.assign(new Error("Not Found"), {
+    name: "NoSuchKey",
+    $metadata: { httpStatusCode: 404 },
+    $fault: "client" as const,
+    $service: "S3",
+  }) as S3ServiceException;
+}
+
+describe("S3StorageProvider.stat", () => {
+  it("returns file entry when HeadObject succeeds", async () => {
+    s3Mock.on(HeadObjectCommand).resolves({
+      ContentLength: 512,
+      LastModified: new Date("2024-06-01"),
+      ETag: '"etag-value"',
+    });
+
+    const provider = makeProvider();
+    const entry = await provider.stat("prints/anchor.stl");
+
+    expect(entry.name).toBe("anchor.stl");
+    expect(entry.type).toBe("file");
+    expect(entry.size).toBe(512);
+    expect(entry.modifiedAt).toEqual(new Date("2024-06-01"));
+    expect(entry.etag).toBe("etag-value");
+  });
+
+  it("returns directory entry when HeadObject 404s but ListObjectsV2 finds content", async () => {
+    s3Mock.on(HeadObjectCommand).rejects(makeNotFoundError());
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [
+        {
+          Key: "prints/anchor.stl",
+          Size: 10,
+          LastModified: new Date(),
+        },
+      ],
+      IsTruncated: false,
+    });
+
+    const provider = makeProvider();
+    const entry = await provider.stat("prints");
+
+    expect(entry.name).toBe("prints");
+    expect(entry.type).toBe("directory");
+    expect(entry.size).toBe(0);
+    expect(entry.modifiedAt).toEqual(new Date(0));
+  });
+
+  it("throws NotFoundError when HeadObject 404s and ListObjectsV2 is empty", async () => {
+    s3Mock.on(HeadObjectCommand).rejects(makeNotFoundError());
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [],
+      CommonPrefixes: [],
+      IsTruncated: false,
+    });
+
+    const provider = makeProvider();
+    await expect(provider.stat("missing/path")).rejects.toBeInstanceOf(
+      NotFoundError,
+    );
+  });
+
+  it("throws PathTraversalError for ../bad", async () => {
+    const provider = makeProvider();
+    await expect(provider.stat("../bad")).rejects.toBeInstanceOf(
+      PathTraversalError,
+    );
+  });
+
+  it("strips ETag quotes for files", async () => {
+    s3Mock.on(HeadObjectCommand).resolves({
+      ContentLength: 100,
+      LastModified: new Date("2024-07-01"),
+      ETag: '"double-quoted-etag"',
+    });
+
+    const provider = makeProvider();
+    const entry = await provider.stat("doc.pdf");
+    expect(entry.etag).toBe("double-quoted-etag");
+  });
+});
+
+describe("S3StorageProvider.exists", () => {
+  it("returns true for a file (HeadObject succeeds)", async () => {
+    s3Mock.on(HeadObjectCommand).resolves({
+      ContentLength: 256,
+      LastModified: new Date("2024-06-15"),
+      ETag: '"abc"',
+    });
+
+    const provider = makeProvider();
+    expect(await provider.exists("prints/anchor.stl")).toBe(true);
+  });
+
+  it("returns true for a directory (HeadObject 404 + ListObjectsV2 has keys)", async () => {
+    s3Mock.on(HeadObjectCommand).rejects(makeNotFoundError());
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [{ Key: "prints/file.stl", Size: 10, LastModified: new Date() }],
+      IsTruncated: false,
+    });
+
+    const provider = makeProvider();
+    expect(await provider.exists("prints")).toBe(true);
+  });
+
+  it("returns false for a missing path", async () => {
+    s3Mock.on(HeadObjectCommand).rejects(makeNotFoundError());
+    s3Mock.on(ListObjectsV2Command).resolves({
+      Contents: [],
+      CommonPrefixes: [],
+      IsTruncated: false,
+    });
+
+    const provider = makeProvider();
+    expect(await provider.exists("no/such/thing")).toBe(false);
+  });
+
+  it("propagates PathTraversalError (does NOT return false)", async () => {
+    const provider = makeProvider();
+    await expect(provider.exists("../etc")).rejects.toBeInstanceOf(
+      PathTraversalError,
+    );
   });
 });
