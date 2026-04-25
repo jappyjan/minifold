@@ -91,7 +91,7 @@ export class S3StorageProvider implements StorageProvider {
     let continuationToken: string | undefined = undefined;
 
     do {
-      const command = new ListObjectsV2Command({
+      const command: ListObjectsV2Command = new ListObjectsV2Command({
         Bucket: this.bucket,
         Prefix: prefix,
         Delimiter: "/",
