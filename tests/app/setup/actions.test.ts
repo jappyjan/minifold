@@ -105,3 +105,40 @@ describe("createFirstProvider — local (regression)", () => {
     expect(row?.type).toBe("local");
   });
 });
+
+describe("createFirstProvider — guard and slug validation", () => {
+  it("returns error when a provider already exists", async () => {
+    await seedAdmin();
+    const { createFirstProvider } = await import("@/app/setup/actions");
+    // Add first provider
+    await createFirstProvider(
+      {},
+      makeFormData({ type: "local", name: "First", rootPath: "/files" }),
+    );
+    vi.resetModules();
+    const { createFirstProvider: createFirstProvider2 } = await import(
+      "@/app/setup/actions"
+    );
+    // Try to add second provider — should be blocked
+    const state = await createFirstProvider2(
+      {},
+      makeFormData({ type: "local", name: "Second", rootPath: "/files2" }),
+    );
+    expect(state.error).toBeTruthy();
+  });
+
+  it("returns fieldErrors when slug is already in use", async () => {
+    await seedAdmin();
+    const { createFirstProvider } = await import("@/app/setup/actions");
+    const state = await createFirstProvider(
+      {},
+      makeFormData({
+        type: "local",
+        name: "NAS",
+        rootPath: "/files",
+        slug: "Bad Slug!",
+      }),
+    );
+    expect(state.fieldErrors?.slug).toBeTruthy();
+  });
+});

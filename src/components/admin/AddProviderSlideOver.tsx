@@ -25,12 +25,13 @@ export function AddProviderSlideOver({
 
   // Close on Escape
   useEffect(() => {
+    if (!open) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [onClose]);
+  }, [open, onClose]);
 
   // Close on successful submission
   useEffect(() => {
