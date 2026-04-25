@@ -108,8 +108,11 @@ User commands:
 Provider commands:
   list-providers                          List configured storage providers.
   add-provider  --name <n> --root-path <p> [--slug <s>]
-                                          Add a local-FS provider. Slug auto-
-                                          generated from name if omitted.
+                                          Add a local-FS provider.
+  add-provider  --type s3 --name <n> --bucket <b> --region <r>
+                --access-key-id <k> --secret-access-key <s>
+                [--slug <s>] [--endpoint <url>] [--path-style]
+                                          Add an S3-compatible provider.
   remove-provider --slug <s>              Remove a provider.
 
 Environment:
@@ -310,40 +313,92 @@ function generateUniqueSlug(db, name) {
   throw new Error("generateUniqueSlug: too many collisions");
 }
 
+function resolveSlug(db, flags) {
+  if (flags.slug) {
+    if (!SLUG_RE.test(flags.slug)) {
+      console.error("--slug must match /^[a-z0-9-]{1,32}$/i");
+      return { error: 2 };
+    }
+    const slug = flags.slug.toLowerCase();
+    const existing = db.prepare("SELECT 1 FROM providers WHERE slug = ?").get(slug);
+    if (existing) {
+      console.error(`Provider slug already exists: ${slug}`);
+      return { error: 1 };
+    }
+    return { slug };
+  }
+  return { slug: generateUniqueSlug(db, flags.name) };
+}
+
 function cmdAddProvider(db, flags) {
   if (!flags.name) {
     console.error("--name is required");
     return 2;
   }
-  if (!flags["root-path"]) {
-    console.error("--root-path is required");
-    return 2;
-  }
 
-  let slug;
-  if (flags.slug) {
-    if (!SLUG_RE.test(flags.slug)) {
-      console.error("--slug must match /^[a-z0-9-]{1,32}$/i");
+  const type = flags.type ?? "local";
+
+  if (type === "local") {
+    if (!flags["root-path"]) {
+      console.error("--root-path is required");
       return 2;
     }
-    slug = flags.slug.toLowerCase();
-    const existing = db.prepare("SELECT 1 FROM providers WHERE slug = ?").get(slug);
-    if (existing) {
-      console.error(`Provider slug already exists: ${slug}`);
-      return 1;
-    }
-  } else {
-    slug = generateUniqueSlug(db, flags.name);
+
+    const { slug, error } = resolveSlug(db, flags);
+    if (error !== undefined) return error;
+
+    const encrypted = encryptJSON(db, { rootPath: flags["root-path"] });
+    const now = Date.now();
+    db.prepare(
+      `INSERT INTO providers (slug, name, type, config, position, created_at)
+       VALUES (?, ?, 'local', ?, 0, ?)`,
+    ).run(slug, flags.name, encrypted, now);
+    console.log(`Added provider ${slug} (${flags.name}) → ${flags["root-path"]}`);
+    return 0;
   }
 
-  const encrypted = encryptJSON(db, { rootPath: flags["root-path"] });
-  const now = Date.now();
-  db.prepare(
-    `INSERT INTO providers (slug, name, type, config, position, created_at)
-     VALUES (?, ?, 'local', ?, 0, ?)`,
-  ).run(slug, flags.name, encrypted, now);
-  console.log(`Added provider ${slug} (${flags.name}) → ${flags["root-path"]}`);
-  return 0;
+  if (type === "s3") {
+    if (!flags.bucket) {
+      console.error("--bucket is required");
+      return 2;
+    }
+    if (!flags.region) {
+      console.error("--region is required");
+      return 2;
+    }
+    if (!flags["access-key-id"]) {
+      console.error("--access-key-id is required");
+      return 2;
+    }
+    if (!flags["secret-access-key"]) {
+      console.error("--secret-access-key is required");
+      return 2;
+    }
+
+    const { slug, error } = resolveSlug(db, flags);
+    if (error !== undefined) return error;
+
+    const config = {
+      bucket: flags.bucket,
+      region: flags.region,
+      accessKeyId: flags["access-key-id"],
+      secretAccessKey: flags["secret-access-key"],
+    };
+    if (flags.endpoint) config.endpoint = flags.endpoint;
+    if (flags["path-style"]) config.pathStyle = !!flags["path-style"];
+
+    const encrypted = encryptJSON(db, config);
+    const now = Date.now();
+    db.prepare(
+      `INSERT INTO providers (slug, name, type, config, position, created_at)
+       VALUES (?, ?, 's3', ?, 0, ?)`,
+    ).run(slug, flags.name, encrypted, now);
+    console.log(`Added S3 provider ${slug} (${flags.name}) → s3://${flags.bucket}`);
+    return 0;
+  }
+
+  console.error("--type must be 'local' or 's3'");
+  return 2;
 }
 
 function cmdRemoveProvider(db, slug) {

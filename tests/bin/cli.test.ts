@@ -253,3 +253,91 @@ describe("minifold CLI — providers", () => {
     expect(r.stderr.toLowerCase()).toContain("no such provider");
   });
 });
+
+describe("minifold CLI — S3 providers", () => {
+  it("add-provider --type s3 creates an S3 provider and list-providers shows it", () => {
+    const added = run([
+      "add-provider",
+      "--type", "s3",
+      "--name", "My Bucket",
+      "--bucket", "my-test-bucket",
+      "--region", "us-east-1",
+      "--access-key-id", "AKIAIOSFODNN7EXAMPLE",
+      "--secret-access-key", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    ]);
+    expect(added.status).toBe(0);
+    expect(added.stdout).toContain("my-test-bucket");
+
+    const listed = run(["list-providers"]);
+    expect(listed.status).toBe(0);
+    expect(listed.stdout).toContain("s3");
+    expect(listed.stdout).toContain("My Bucket");
+  });
+
+  it("add-provider --type s3 requires --bucket", () => {
+    const r = run([
+      "add-provider",
+      "--type", "s3",
+      "--name", "My Bucket",
+      "--region", "us-east-1",
+      "--access-key-id", "AKIAIOSFODNN7EXAMPLE",
+      "--secret-access-key", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    ]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.toLowerCase()).toContain("--bucket");
+  });
+
+  it("add-provider --type s3 requires --region", () => {
+    const r = run([
+      "add-provider",
+      "--type", "s3",
+      "--name", "My Bucket",
+      "--bucket", "my-test-bucket",
+      "--access-key-id", "AKIAIOSFODNN7EXAMPLE",
+      "--secret-access-key", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    ]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.toLowerCase()).toContain("--region");
+  });
+
+  it("add-provider --type s3 requires --access-key-id", () => {
+    const r = run([
+      "add-provider",
+      "--type", "s3",
+      "--name", "My Bucket",
+      "--bucket", "my-test-bucket",
+      "--region", "us-east-1",
+      "--secret-access-key", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    ]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.toLowerCase()).toContain("--access-key-id");
+  });
+
+  it("add-provider --type s3 requires --secret-access-key", () => {
+    const r = run([
+      "add-provider",
+      "--type", "s3",
+      "--name", "My Bucket",
+      "--bucket", "my-test-bucket",
+      "--region", "us-east-1",
+      "--access-key-id", "AKIAIOSFODNN7EXAMPLE",
+    ]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr.toLowerCase()).toContain("--secret-access-key");
+  });
+
+  it("add-provider --type s3 accepts optional --endpoint", () => {
+    const r = run([
+      "add-provider",
+      "--type", "s3",
+      "--name", "MinIO",
+      "--bucket", "minio-bucket",
+      "--region", "us-east-1",
+      "--access-key-id", "minioadmin",
+      "--secret-access-key", "minioadmin",
+      "--endpoint", "https://minio.example.com",
+    ]);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("minio-bucket");
+  });
+});
