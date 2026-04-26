@@ -5,6 +5,7 @@ import { findFileDescription } from "@/server/browse/description-file";
 import { readTextFile } from "@/server/browse/read-text";
 import { encodePathSegments } from "@/server/browse/encode-path";
 import { Markdown } from "./Markdown";
+import { ModelViewerLazy } from "./ModelViewerLazy";
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -153,7 +154,16 @@ function Viewer({
       />
     );
   }
-  // STL, 3MF, anything else — preview comes in later phases (3D viewer in Phase 5).
+  if (kind === "stl" || kind === "3mf") {
+    return (
+      <ModelViewerLazy
+        fileApi={fileApi}
+        fileSize={entry.size}
+        kind={kind}
+        fileName={entry.name}
+      />
+    );
+  }
   return (
     <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-neutral-50 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
       Preview not available — use the Download button.
