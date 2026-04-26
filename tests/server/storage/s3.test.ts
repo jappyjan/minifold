@@ -365,6 +365,7 @@ describe("S3StorageProvider.read", () => {
   it("returns a ReadableStream whose content matches the mocked S3 body", async () => {
     const bodyContent = Buffer.from("hello s3");
     s3Mock.on(GetObjectCommand).resolves({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       Body: Readable.from([bodyContent]) as any,
     });
 
