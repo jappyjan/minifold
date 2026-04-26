@@ -15,7 +15,7 @@ export function parseFrontmatter(src: string): {
 } {
   const m = FRONTMATTER_RE.exec(src);
   if (!m) return { tags: [], body: src };
-  const fmBody = m[1];
+  const fmBody = m[1] ?? "";
   const body = src.slice(m[0].length);
   const tags = extractTags(fmBody);
   return { tags, body };
@@ -24,17 +24,17 @@ export function parseFrontmatter(src: string): {
 function extractTags(fm: string): string[] {
   const lines = fm.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i] ?? "";
     const inline = /^tags:\s*(.*)$/.exec(line);
     if (!inline) continue;
-    const value = inline[1].trim();
+    const value = (inline[1] ?? "").trim();
     if (value === "") {
       // Block list on subsequent lines
       const out: string[] = [];
       for (let j = i + 1; j < lines.length; j++) {
-        const item = /^\s*-\s*(.+?)\s*$/.exec(lines[j]);
+        const item = /^\s*-\s*(.+?)\s*$/.exec(lines[j] ?? "");
         if (!item) break;
-        out.push(stripQuotes(item[1]));
+        out.push(stripQuotes(item[1] ?? ""));
       }
       return out;
     }
