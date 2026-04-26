@@ -97,7 +97,13 @@ export function ModelViewer({ fileApi, kind, fileName }: Props) {
         <directionalLight position={[5, 5, 5]} intensity={0.8} />
         <Suspense fallback={null}>
           {model && (
-            <Bounds fit clip observe margin={1.2}>
+            <Bounds
+              fit
+              clip
+              observe
+              margin={1.2}
+              onFit={() => controlsRef.current?.saveState()}
+            >
               {model.type === "stl" ? (
                 <mesh geometry={model.geometry}>{stlMaterial}</mesh>
               ) : (
