@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Entry } from "@/server/storage/types";
 import { fileKindOf } from "@/server/browse/file-kind";
+import { encodePathSegments } from "@/server/browse/encode-path";
 
 type Props = {
   providerSlug: string;
@@ -14,7 +15,7 @@ function joinPath(parent: string, name: string): string {
 
 export function EntryCard({ providerSlug, parentPath, entry }: Props) {
   const childPath = joinPath(parentPath, entry.name);
-  const href = `/${providerSlug}/${childPath}`;
+  const href = `/${providerSlug}/${encodePathSegments(childPath)}`;
   return (
     <Link
       href={href}

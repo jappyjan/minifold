@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { encodePathSegments } from "@/server/browse/encode-path";
 
 type Props = {
   providerSlug: string;
@@ -13,7 +14,7 @@ export function Breadcrumbs({ providerSlug, providerName, pathSegments }: Props)
   let acc = "";
   for (const seg of pathSegments) {
     acc = acc ? `${acc}/${seg}` : seg;
-    crumbs.push({ label: seg, href: `/${providerSlug}/${acc}` });
+    crumbs.push({ label: seg, href: `/${providerSlug}/${encodePathSegments(acc)}` });
   }
   return (
     <nav aria-label="Breadcrumb" className="text-sm">

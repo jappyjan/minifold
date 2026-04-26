@@ -34,4 +34,12 @@ describe("EntryCard", () => {
     const link = screen.getByRole("link", { name: /readme\.md/i });
     expect(link.getAttribute("href")).toBe("/nas/readme.md");
   });
+
+  it("URL-encodes filenames containing reserved characters", () => {
+    render(
+      <EntryCard providerSlug="nas" parentPath="prints" entry={file("draft #2.md")} />,
+    );
+    const link = screen.getByRole("link", { name: /draft #2\.md/i });
+    expect(link.getAttribute("href")).toBe("/nas/prints/draft%20%232.md");
+  });
 });
