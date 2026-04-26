@@ -73,15 +73,18 @@ describe("computeDirHash", () => {
     expect(computeDirHash([])).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("does not collide when a filename contains a newline", () => {
-    // Under the old `name|type|size|sig\n` scheme, an entry named "a\nb"
-    // serialized identically to two entries named "a" and "b" with matching
-    // sigs. With NUL delimiters the two cases must produce different hashes.
+  it("does not collide when a filename contains delimiter-like characters", () => {
+    // The old `name|type|size|sig\n` scheme could be tricked by a name that
+    // embedded the field delimiters. With type=file, size=1, sig=1, the name
+    // "a|file|1|1\nb" serializes to "a|file|1|1\nb|file|1|1\n" — byte-
+    // identical to two entries named "a" and "b". NUL delimiters fix this
+    // because NUL is forbidden in POSIX filenames and cannot appear in any
+    // field value.
     const split = computeDirHash([
       fileEntry("a", 1, 1),
       fileEntry("b", 1, 1),
     ]);
-    const joined = computeDirHash([fileEntry("a\nb", 1, 1)]);
-    expect(split).not.toBe(joined);
+    const collidingName = computeDirHash([fileEntry("a|file|1|1\nb", 1, 1)]);
+    expect(split).not.toBe(collidingName);
   });
 });
