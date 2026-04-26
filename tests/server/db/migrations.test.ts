@@ -92,4 +92,23 @@ describe("bundled migrations", () => {
       ["config", "created_at", "name", "position", "slug", "type"].sort(),
     );
   });
+
+  it("applies 004_dir_cache and creates dir_cache table", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "minifold-init-"));
+    const db = createDatabase(join(tmp, "test.db"));
+    cleanup = () => {
+      db.close();
+      rmSync(tmp, { recursive: true, force: true });
+    };
+
+    const dir = resolve(process.cwd(), "src/server/db/migrations");
+    runMigrations(db, dir);
+
+    const cols = db.prepare("PRAGMA table_info(dir_cache)").all() as Array<{
+      name: string;
+    }>;
+    expect(cols.map((c) => c.name).sort()).toEqual(
+      ["computed_at", "hash", "path"].sort(),
+    );
+  });
 });
