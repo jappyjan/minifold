@@ -187,7 +187,7 @@ describe("S3StorageProvider.list", () => {
     const provider = makeProvider();
     const entries = await provider.list("/prints");
     expect(entries).toHaveLength(1);
-    expect(entries[0].name).toBe("anchor.stl");
+    expect(entries[0]!.name).toBe("anchor.stl");
   });
 
   it("strips quotes from ETag", async () => {
@@ -205,7 +205,7 @@ describe("S3StorageProvider.list", () => {
 
     const provider = makeProvider();
     const entries = await provider.list("");
-    expect(entries[0].etag).toBe("quoted-etag-value");
+    expect(entries[0]!.etag).toBe("quoted-etag-value");
   });
 
   it("skips S3 directory marker keys (key equals prefix exactly)", async () => {
@@ -230,7 +230,7 @@ describe("S3StorageProvider.list", () => {
     const provider = makeProvider();
     const entries = await provider.list("prints");
     expect(entries).toHaveLength(1);
-    expect(entries[0].name).toBe("real-file.txt");
+    expect(entries[0]!.name).toBe("real-file.txt");
   });
 });
 

@@ -27,6 +27,8 @@ describe("providerFromRow", () => {
         region: "us-east-1",
         accessKeyId: "AKID",
         secretAccessKey: "SECRET",
+        endpoint: "",
+        pathStyle: false,
       },
       position: 0,
       created_at: Date.now(),
