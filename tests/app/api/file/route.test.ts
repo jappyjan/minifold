@@ -27,6 +27,7 @@ beforeEach(() => {
     Buffer.from([0, 1, 2, 3, 4, 5, 6, 7]),
   );
   writeFileSync(join(filesRoot, "notes.md"), "# Hello\n");
+  writeFileSync(join(filesRoot, "café.md"), "# Café\n");
 
   const db = createDatabase(join(tmp, "test.db"));
   runMigrations(db, resolve(process.cwd(), "src/server/db/migrations"));
@@ -140,6 +141,33 @@ describe("GET /api/file/[provider]/[...path]", () => {
     );
     expect(res.headers.get("content-disposition")).toMatch(/^attachment/);
     expect(res.headers.get("content-disposition")).toContain('filename="notes.md"');
+  });
+
+  it("emits filename* for non-ASCII filenames (RFC 5987)", async () => {
+    await authedAsUser();
+    const { GET } = await import("@/app/api/file/[provider]/[...path]/route");
+    const res = await GET(
+      new Request("http://x/api/file/nas/caf%C3%A9.md"),
+      await ctx("nas", ["café.md"]),
+    );
+    expect(res.status).toBe(200);
+    const cd = res.headers.get("content-disposition") ?? "";
+    expect(cd).toContain("filename*=UTF-8''");
+    expect(cd).toContain(encodeURIComponent("café.md"));
+    // ASCII fallback must be header-safe (no raw UTF-8 in filename=)
+    const asciiMatch = /filename="([^"]*)"/.exec(cd);
+    expect(asciiMatch).not.toBeNull();
+    expect(asciiMatch?.[1]).toMatch(/^[\x20-\x7e]*$/);
+  });
+
+  it("sets cache-control: private to prevent shared caches", async () => {
+    await authedAsUser();
+    const { GET } = await import("@/app/api/file/[provider]/[...path]/route");
+    const res = await GET(
+      new Request("http://x/api/file/nas/notes.md"),
+      await ctx("nas", ["notes.md"]),
+    );
+    expect(res.headers.get("cache-control")).toContain("private");
   });
 
   it("returns 400 on path traversal", async () => {

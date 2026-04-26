@@ -51,22 +51,25 @@ export async function GET(req: Request, ctx: Ctx) {
   }
 
   const inline = new URL(req.url).searchParams.get("inline") === "1";
-  const disposition = inline
-    ? `inline; filename="${encodeFilename(fileName)}"`
-    : `attachment; filename="${encodeFilename(fileName)}"`;
+  const dispositionType = inline ? "inline" : "attachment";
 
   return new Response(body, {
     status: 200,
     headers: {
       "content-type": mimeFor(fileName),
       "content-length": String(entry.size),
-      "content-disposition": disposition,
+      "content-disposition": `${dispositionType}; ${dispositionFilename(fileName)}`,
       "cache-control": "private, max-age=0",
     },
   });
 }
 
-function encodeFilename(name: string): string {
-  // Escape quotes and backslashes; keep it ASCII-safe inside the quoted string.
-  return name.replace(/[\\"]/g, "\\$&");
+// RFC 6266 / RFC 5987: emit both `filename=` (ASCII fallback) and
+// `filename*=UTF-8''…` (percent-encoded UTF-8) so browsers handle non-ASCII
+// names correctly. CR/LF are stripped to avoid header injection.
+function dispositionFilename(name: string): string {
+  const safe = name.replace(/[\r\n]/g, "");
+  const ascii = safe.replace(/[^\x20-\x7e]/g, "_").replace(/[\\"]/g, "\\$&");
+  const encoded = encodeURIComponent(safe);
+  return `filename="${ascii}"; filename*=UTF-8''${encoded}`;
 }
