@@ -72,4 +72,16 @@ describe("computeDirHash", () => {
     expect(computeDirHash([])).toBe(computeDirHash([]));
     expect(computeDirHash([])).toMatch(/^[0-9a-f]{64}$/);
   });
+
+  it("does not collide when a filename contains a newline", () => {
+    // Under the old `name|type|size|sig\n` scheme, an entry named "a\nb"
+    // serialized identically to two entries named "a" and "b" with matching
+    // sigs. With NUL delimiters the two cases must produce different hashes.
+    const split = computeDirHash([
+      fileEntry("a", 1, 1),
+      fileEntry("b", 1, 1),
+    ]);
+    const joined = computeDirHash([fileEntry("a\nb", 1, 1)]);
+    expect(split).not.toBe(joined);
+  });
 });
