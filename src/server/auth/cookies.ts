@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
+import { SESSION_COOKIE } from "./session-constants";
 
-export const SESSION_COOKIE = "minifold_session";
+export { SESSION_COOKIE } from "./session-constants";
 
 export async function readSessionCookie(): Promise<string | null> {
   const store = await cookies();

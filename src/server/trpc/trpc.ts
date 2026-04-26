@@ -3,9 +3,7 @@ import superjson from "superjson";
 import type { UserRow } from "@/server/db/users";
 import { getDatabase } from "@/server/db";
 import { validateSession } from "@/server/auth/session";
-
-// Duplicated from @/server/auth/cookies to avoid importing next/headers in this module
-const SESSION_COOKIE = "minifold_session";
+import { SESSION_COOKIE } from "@/server/auth/session-constants";
 
 export type TRPCContext = {
   currentUser: UserRow | null;
