@@ -156,6 +156,14 @@ export class S3StorageProvider implements StorageProvider {
     const key = segments.join("/"); // e.g. "prints/anchor.stl" or "prints"
     const name = segments[segments.length - 1] ?? "";
 
+    // The bucket root is always a directory. Skip the HeadObject probe for it
+    // — some S3 implementations (notably Hetzner) return success for
+    // HeadObject with Key="" instead of 404, which would misclassify the root
+    // as a 0-byte file.
+    if (key === "") {
+      return { name: "", type: "directory", size: 0, modifiedAt: new Date(0) };
+    }
+
     // Try HeadObject first (file probe)
     try {
       const resp = await this.client.send(

@@ -245,6 +245,22 @@ function makeNotFoundError(): S3ServiceException {
 }
 
 describe("S3StorageProvider.stat", () => {
+  it("returns directory entry for the bucket root without calling HeadObject", async () => {
+    // Hetzner returns success for HeadObject(Key=""), which would misclassify
+    // the bucket root as a 0-byte file. Make sure we never even call it.
+    s3Mock.on(HeadObjectCommand).resolves({
+      ContentLength: 0,
+      LastModified: new Date(0),
+    });
+
+    const provider = makeProvider();
+    const entry = await provider.stat("");
+
+    expect(entry.type).toBe("directory");
+    expect(entry.name).toBe("");
+    expect(s3Mock.commandCalls(HeadObjectCommand).length).toBe(0);
+  });
+
   it("returns file entry when HeadObject succeeds", async () => {
     s3Mock.on(HeadObjectCommand).resolves({
       ContentLength: 512,
