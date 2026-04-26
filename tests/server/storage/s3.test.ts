@@ -9,7 +9,7 @@ import {
 } from "@aws-sdk/client-s3";
 import type { S3ServiceException } from "@aws-sdk/client-s3";
 import { Readable } from "node:stream";
-import { S3StorageProvider } from "@/server/storage/s3";
+import { S3StorageProvider, normalizeEndpoint } from "@/server/storage/s3";
 import { PathTraversalError, NotFoundError } from "@/server/storage/types";
 
 const s3Mock = mockClient(S3Client);
@@ -425,5 +425,41 @@ describe("S3StorageProvider.write", () => {
     await expect(
       provider.write("../secret", Buffer.from("evil")),
     ).rejects.toBeInstanceOf(PathTraversalError);
+  });
+});
+
+describe("normalizeEndpoint", () => {
+  it("returns undefined for empty / whitespace / nullish input", () => {
+    expect(normalizeEndpoint(undefined)).toBeUndefined();
+    expect(normalizeEndpoint("")).toBeUndefined();
+    expect(normalizeEndpoint("   ")).toBeUndefined();
+  });
+
+  it("passes through full URLs unchanged", () => {
+    expect(normalizeEndpoint("https://nbg1.your-objectstorage.com")).toBe(
+      "https://nbg1.your-objectstorage.com",
+    );
+    expect(normalizeEndpoint("http://minio.local:9000")).toBe(
+      "http://minio.local:9000",
+    );
+  });
+
+  it("prepends https:// when the user omitted the scheme", () => {
+    expect(normalizeEndpoint("nbg1.your-objectstorage.com")).toBe(
+      "https://nbg1.your-objectstorage.com",
+    );
+    expect(normalizeEndpoint("s3.us-west-001.backblazeb2.com")).toBe(
+      "https://s3.us-west-001.backblazeb2.com",
+    );
+  });
+
+  it("trims surrounding whitespace before deciding", () => {
+    expect(normalizeEndpoint("  nbg1.your-objectstorage.com  ")).toBe(
+      "https://nbg1.your-objectstorage.com",
+    );
+  });
+
+  it("is case-insensitive on the scheme check", () => {
+    expect(normalizeEndpoint("HTTPS://example.com")).toBe("HTTPS://example.com");
   });
 });

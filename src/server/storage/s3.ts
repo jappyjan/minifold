@@ -31,13 +31,14 @@ export class S3StorageProvider implements StorageProvider {
   constructor(opts: Options) {
     this.slug = opts.slug;
     this.bucket = opts.bucket;
+    const endpoint = normalizeEndpoint(opts.endpoint);
     this.client = new S3Client({
       region: opts.region,
       credentials: {
         accessKeyId: opts.accessKeyId,
         secretAccessKey: opts.secretAccessKey,
       },
-      ...(opts.endpoint ? { endpoint: opts.endpoint } : {}),
+      ...(endpoint ? { endpoint } : {}),
       ...(opts.forcePathStyle ? { forcePathStyle: opts.forcePathStyle } : {}),
     });
   }
@@ -245,4 +246,19 @@ export class S3StorageProvider implements StorageProvider {
       throw err;
     }
   }
+}
+
+// Coerce a user-supplied S3 endpoint into something the AWS SDK can parse.
+// Accepts:
+//   "" / undefined            → undefined (use default AWS endpoint)
+//   "https://host.example"    → unchanged
+//   "host.example"            → "https://host.example" (Hetzner / Backblaze /
+//                                 etc. docs commonly omit the scheme)
+// Trims whitespace.
+export function normalizeEndpoint(raw: string | undefined): string | undefined {
+  if (raw == null) return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === "") return undefined;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
 }
