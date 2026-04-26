@@ -1,8 +1,9 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Bounds, OrbitControls } from "@react-three/drei";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
@@ -22,6 +23,8 @@ type LoadedModel =
 export function ModelViewer({ fileApi, kind, fileName }: Props) {
   const [model, setModel] = useState<LoadedModel | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [wireframe, setWireframe] = useState(false);
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -58,6 +61,27 @@ export function ModelViewer({ fileApi, kind, fileName }: Props) {
     };
   }, [fileApi, kind, fileName]);
 
+  // Push the wireframe flag down into every material inside a 3MF group.
+  // For STL we toggle it via a prop on <meshStandardMaterial> directly.
+  useEffect(() => {
+    if (model?.type !== "3mf") return;
+    model.group.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+      for (const m of materials) {
+        if (m && "wireframe" in m) {
+          (m as THREE.Material & { wireframe: boolean }).wireframe = wireframe;
+          m.needsUpdate = true;
+        }
+      }
+    });
+  }, [wireframe, model]);
+
+  const stlMaterial = useMemo(
+    () => <meshStandardMaterial color="#a3a3a3" wireframe={wireframe} />,
+    [wireframe],
+  );
+
   if (error) {
     return (
       <div className="flex h-[60vh] w-full items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-neutral-50 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 md:h-[70vh]">
@@ -75,17 +99,35 @@ export function ModelViewer({ fileApi, kind, fileName }: Props) {
           {model && (
             <Bounds fit clip observe margin={1.2}>
               {model.type === "stl" ? (
-                <mesh geometry={model.geometry}>
-                  <meshStandardMaterial color="#a3a3a3" />
-                </mesh>
+                <mesh geometry={model.geometry}>{stlMaterial}</mesh>
               ) : (
                 <primitive object={model.group} />
               )}
             </Bounds>
           )}
         </Suspense>
-        <OrbitControls makeDefault enableDamping dampingFactor={0.1} />
+        <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.1} />
       </Canvas>
+
+      {/* Toolbar */}
+      <div className="absolute right-2 top-2 flex gap-1">
+        <button
+          type="button"
+          onClick={() => setWireframe((w) => !w)}
+          aria-pressed={wireframe}
+          className="rounded border border-neutral-300 bg-white/90 px-2 py-1 text-xs text-neutral-700 backdrop-blur hover:bg-white dark:border-neutral-700 dark:bg-neutral-950/80 dark:text-neutral-300 dark:hover:bg-neutral-900"
+        >
+          {wireframe ? "Solid" : "Wireframe"}
+        </button>
+        <button
+          type="button"
+          onClick={() => controlsRef.current?.reset()}
+          className="rounded border border-neutral-300 bg-white/90 px-2 py-1 text-xs text-neutral-700 backdrop-blur hover:bg-white dark:border-neutral-700 dark:bg-neutral-950/80 dark:text-neutral-300 dark:hover:bg-neutral-900"
+        >
+          Reset
+        </button>
+      </div>
+
       {!model && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-neutral-500 dark:text-neutral-400">
           Loading model…
