@@ -11,7 +11,7 @@ type Props = {
   providerSlug: string;
   path: string;
   parentPath: string;
-  initialEntries: readonly Entry[]; // visible (non-hidden), sorted; NOT yet filtered for description/sidecar
+  initialEntries: readonly Entry[]; // visible (non-hidden), sorted; NOT pre-filtered for description/sidecar
   initialHash: string;
   descriptionName: string | null;
   sidecarNames: readonly string[]; // already showAll-resolved by the page
@@ -44,41 +44,45 @@ export function FolderBrowser({
   descriptionName,
   sidecarNames,
 }: Props) {
+  // null = IDB hasn't been checked yet (query is gated on this)
+  // string = the hash we want to validate against the server
+  const [knownHash, setKnownHash] = useState<string | null>(null);
   const [rawEntries, setRawEntries] = useState<readonly Entry[]>(initialEntries);
-  const [knownHash, setKnownHash] = useState<string>(initialHash);
   const seededFromCache = useRef(false);
 
-  // Hydrate from IndexedDB on mount (and whenever the URL changes).
+  // Hydrate from IndexedDB first. Once this resolves we know whether to
+  // validate the cached hash or the SSR-computed initialHash.
   useEffect(() => {
     let cancelled = false;
     seededFromCache.current = false;
     getCachedDir(cacheKey(providerSlug, path))
       .then((cached) => {
-        if (cancelled || !cached) return;
-        seededFromCache.current = true;
-        setKnownHash(cached.hash);
-        setRawEntries(cached.entries);
+        if (cancelled) return;
+        if (cached) {
+          seededFromCache.current = true;
+          setRawEntries(cached.entries);
+          setKnownHash(cached.hash);
+        } else {
+          setKnownHash(initialHash);
+        }
       })
       .catch(() => {
-        // Best-effort: a broken IDB just means we keep showing initialEntries.
+        // IDB broken — fall back to validating the SSR hash.
+        if (!cancelled) setKnownHash(initialHash);
       });
     return () => {
       cancelled = true;
     };
-  }, [providerSlug, path]);
+  }, [providerSlug, path, initialHash]);
 
-  const query = trpc.browse.list.useQuery({
-    providerSlug,
-    path,
-    knownHash,
-  });
+  const query = trpc.browse.list.useQuery(
+    { providerSlug, path, knownHash: knownHash ?? undefined },
+    { enabled: knownHash !== null },
+  );
 
   // Apply the tRPC response.
   useEffect(() => {
-    const data = query.data as
-      | { changed: true; hash: string; entries: Entry[] }
-      | { changed: false; hash: string }
-      | undefined;
+    const data = query.data;
     if (!data) return;
     if (data.changed) {
       setKnownHash(data.hash);
@@ -89,31 +93,28 @@ export function FolderBrowser({
         cachedAt: Date.now(),
       });
     } else if (!seededFromCache.current) {
-      // Server confirmed our initial render is fresh — seed IDB so the
-      // next navigation hits the cache.
+      // Server confirmed initialEntries are fresh; seed IDB so the next
+      // navigation hits the cache.
       void setCachedDir(cacheKey(providerSlug, path), {
         hash: data.hash,
         entries: [...initialEntries],
         cachedAt: Date.now(),
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.data]);
+  }, [query.data, providerSlug, path, initialEntries]);
 
-  // If the tRPC query throws, drop a stale cache so we don't keep showing
-  // a phantom listing for a deleted/forbidden directory.
+  // If the tRPC query throws, drop the cache entry so we don't keep
+  // showing a phantom listing for a deleted/forbidden directory.
   useEffect(() => {
     if (query.error) {
       void clearCachedDir(cacheKey(providerSlug, path));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query.error]);
+  }, [query.error, providerSlug, path]);
 
-  const sidecarKey = sidecarNames.join("|");
+  const sidecarSet = useMemo(() => new Set(sidecarNames), [sidecarNames]);
   const displayed = useMemo(
-    () => applyGridFilter(rawEntries, descriptionName, new Set(sidecarNames)),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rawEntries, descriptionName, sidecarKey],
+    () => applyGridFilter(rawEntries, descriptionName, sidecarSet),
+    [rawEntries, descriptionName, sidecarSet],
   );
 
   return (

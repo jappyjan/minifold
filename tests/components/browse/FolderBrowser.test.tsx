@@ -21,7 +21,11 @@ vi.mock("@/trpc/client", () => ({
   trpc: {
     browse: {
       list: {
-        useQuery: (input: unknown) => {
+        useQuery: (input: unknown, options?: { enabled?: boolean }) => {
+          if (options?.enabled === false) {
+            // Mimic React Query: disabled queries return no data.
+            return { data: undefined, error: null };
+          }
           lastInputRef.input = input;
           return mockQueryState;
         },
@@ -167,7 +171,7 @@ describe("FolderBrowser", () => {
     expect(screen.queryByText("anchor.md")).not.toBeInTheDocument();
   });
 
-  it("passes knownHash to the tRPC query (initialHash on first render)", () => {
+  it("uses initialHash as knownHash when no IDB cache exists", async () => {
     render(
       <FolderBrowser
         providerSlug="nas"
@@ -179,10 +183,47 @@ describe("FolderBrowser", () => {
         sidecarNames={[]}
       />,
     );
-    expect(lastInputRef.input).toMatchObject({
-      providerSlug: "nas",
-      path: "prints",
-      knownHash: "known-hash",
+    await waitFor(() =>
+      expect(lastInputRef.input).toMatchObject({
+        providerSlug: "nas",
+        path: "prints",
+        knownHash: "known-hash",
+      }),
+    );
+  });
+
+  it("uses cached hash as knownHash when IDB cache exists (so stale caches get revalidated)", async () => {
+    await setCachedDir("nas/", {
+      hash: "stale-cached-hash",
+      entries: [file("from-cache.stl")],
+      cachedAt: 1,
     });
+    // Server detects mismatch and returns fresh entries.
+    mockQueryState.data = {
+      changed: true,
+      hash: "fresh-hash",
+      entries: [file("fresh.stl")],
+    };
+    render(
+      <FolderBrowser
+        providerSlug="nas"
+        path=""
+        parentPath=""
+        initialHash="initial-different-hash"
+        initialEntries={[file("from-initial.stl")]}
+        descriptionName={null}
+        sidecarNames={[]}
+      />,
+    );
+    await waitFor(() =>
+      expect(lastInputRef.input).toMatchObject({
+        providerSlug: "nas",
+        path: "",
+        knownHash: "stale-cached-hash",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText("fresh.stl")).toBeInTheDocument(),
+    );
   });
 });
