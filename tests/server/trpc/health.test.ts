@@ -3,7 +3,7 @@ import { appRouter } from "@/server/trpc/router";
 
 describe("health router", () => {
   it("returns status: ok", async () => {
-    const caller = appRouter.createCaller({});
+    const caller = appRouter.createCaller({ currentUser: null });
     const result = await caller.health.check();
     expect(result).toEqual({ status: "ok" });
   });
