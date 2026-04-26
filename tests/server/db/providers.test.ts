@@ -114,6 +114,14 @@ describe("providers repository", () => {
       createProvider(db, { slug: "a", name: "A2", type: "local", config: { rootPath: "/b" } }),
     ).toThrow();
   });
+
+  it("generateUniqueSlug skips reserved bases (admin → admin-2)", () => {
+    expect(generateUniqueSlug(db, "Admin")).toBe("admin-2");
+  });
+
+  it("generateUniqueSlug skips reserved bases regardless of collision (api → api-2)", () => {
+    expect(generateUniqueSlug(db, "API")).toBe("api-2");
+  });
 });
 
 describe("slugify", () => {

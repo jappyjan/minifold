@@ -10,6 +10,7 @@ import {
   generateUniqueSlug,
 } from "@/server/db/providers";
 import type { S3Config } from "@/server/db/providers";
+import { isReservedSlug } from "@/server/browse/reserved-slugs";
 
 // ── Zod schemas ──────────────────────────────────────────────────────────────
 
@@ -100,6 +101,10 @@ export async function addProvider(
       if (!fieldErrors[key]) fieldErrors[key] = issue.message;
     }
     return { fieldErrors };
+  }
+
+  if (parsed.data.slug && isReservedSlug(parsed.data.slug)) {
+    return { fieldErrors: { slug: "Slug is reserved" } };
   }
 
   const db = getDatabase();

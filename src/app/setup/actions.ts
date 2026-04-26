@@ -15,6 +15,7 @@ import {
 import { hashPassword } from "@/server/auth/password";
 import { createSession } from "@/server/auth/session";
 import { writeSessionCookie } from "@/server/auth/cookies";
+import { isReservedSlug } from "@/server/browse/reserved-slugs";
 
 const schema = z.object({
   name: z.string().min(1, "Name is required").max(200),
@@ -142,6 +143,10 @@ export async function createFirstProvider(
       if (!fieldErrors[key]) fieldErrors[key] = issue.message;
     }
     return { fieldErrors };
+  }
+
+  if (parsed.data.slug && isReservedSlug(parsed.data.slug)) {
+    return { fieldErrors: { slug: "Slug is reserved" } };
   }
 
   let slug: string;

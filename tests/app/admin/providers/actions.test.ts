@@ -85,6 +85,15 @@ describe("addProvider — local", () => {
     );
     expect(state.fieldErrors?.slug).toBeTruthy();
   });
+
+  it("returns fieldErrors when slug is reserved", async () => {
+    const { addProvider } = await import("@/app/admin/providers/actions");
+    const state = await addProvider(
+      {},
+      makeFormData({ type: "local", name: "Admin", rootPath: "/files", slug: "admin" }),
+    );
+    expect(state.fieldErrors?.slug).toBeTruthy();
+  });
 });
 
 describe("addProvider — S3", () => {

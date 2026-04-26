@@ -1,5 +1,6 @@
 import type { Database } from "better-sqlite3";
 import { decryptJSON, encryptJSON } from "@/server/auth/encryption";
+import { isReservedSlug } from "@/server/browse/reserved-slugs";
 
 export type ProviderType = "local" | "s3";
 
@@ -99,13 +100,14 @@ export function slugify(name: string): string {
 export function generateUniqueSlug(db: Database, name: string): string {
   const base = slugify(name) || "provider";
   const exists = db.prepare("SELECT 1 FROM providers WHERE slug = ?");
-  if (!exists.get(base)) return base;
+  const isFree = (s: string) => !isReservedSlug(s) && !exists.get(s);
+  if (isFree(base)) return base;
   for (let suffix = 2; suffix <= 999; suffix++) {
     const tail = `-${suffix}`;
     const allowed = 32 - tail.length;
     const trimmed = base.length > allowed ? base.slice(0, allowed) : base;
     const candidate = `${trimmed}${tail}`;
-    if (!exists.get(candidate)) return candidate;
+    if (isFree(candidate)) return candidate;
   }
   throw new Error("generateUniqueSlug: too many collisions");
 }
