@@ -141,4 +141,19 @@ describe("createFirstProvider — guard and slug validation", () => {
     );
     expect(state.fieldErrors?.slug).toBeTruthy();
   });
+
+  it("returns fieldErrors when slug is reserved", async () => {
+    await seedAdmin();
+    const { createFirstProvider } = await import("@/app/setup/actions");
+    const state = await createFirstProvider(
+      {},
+      makeFormData({
+        type: "local",
+        name: "Admin",
+        rootPath: "/files",
+        slug: "admin",
+      }),
+    );
+    expect(state.fieldErrors?.slug).toBeTruthy();
+  });
 });
