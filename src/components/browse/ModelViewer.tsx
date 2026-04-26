@@ -1,13 +1,24 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Component,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Canvas } from "@react-three/fiber";
 import { Bounds, OrbitControls } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
-import type { ModelLoaderKind } from "@/server/browse/model-preview";
+import {
+  isTooLargeForPreview,
+  type ModelLoaderKind,
+} from "@/server/browse/model-preview";
 
 type Props = {
   fileApi: string;
@@ -20,7 +31,65 @@ type LoadedModel =
   | { type: "stl"; geometry: THREE.BufferGeometry }
   | { type: "3mf"; group: THREE.Group };
 
-export function ModelViewer({ fileApi, kind, fileName }: Props) {
+function FallbackBox({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex h-[60vh] w-full items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-4 text-center text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 md:h-[70vh]">
+      {children}
+    </div>
+  );
+}
+
+function formatMb(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+class ViewerErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  override state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  override componentDidCatch(error: unknown) {
+    console.error("ModelViewer error boundary caught", error);
+  }
+  override render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
+}
+
+export function ModelViewer({ fileApi, fileSize, kind, fileName }: Props) {
+  if (isTooLargeForPreview(fileSize)) {
+    return (
+      <FallbackBox>
+        File is {formatMb(fileSize)} — too large to preview in-browser. Use the
+        Download button.
+      </FallbackBox>
+    );
+  }
+
+  return (
+    <ViewerErrorBoundary
+      fallback={
+        <FallbackBox>Preview not available — use the Download button.</FallbackBox>
+      }
+    >
+      <ViewerInner fileApi={fileApi} kind={kind} fileName={fileName} />
+    </ViewerErrorBoundary>
+  );
+}
+
+function ViewerInner({
+  fileApi,
+  kind,
+  fileName,
+}: {
+  fileApi: string;
+  kind: ModelLoaderKind;
+  fileName: string;
+}) {
   const [model, setModel] = useState<LoadedModel | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [wireframe, setWireframe] = useState(false);
@@ -61,8 +130,6 @@ export function ModelViewer({ fileApi, kind, fileName }: Props) {
     };
   }, [fileApi, kind, fileName]);
 
-  // Push the wireframe flag down into every material inside a 3MF group.
-  // For STL we toggle it via a prop on <meshStandardMaterial> directly.
   useEffect(() => {
     if (model?.type !== "3mf") return;
     model.group.traverse((obj) => {
@@ -83,11 +150,7 @@ export function ModelViewer({ fileApi, kind, fileName }: Props) {
   );
 
   if (error) {
-    return (
-      <div className="flex h-[60vh] w-full items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-neutral-50 text-sm text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 md:h-[70vh]">
-        {error} Use the Download button.
-      </div>
-    );
+    return <FallbackBox>{error} Use the Download button.</FallbackBox>;
   }
 
   return (
@@ -115,7 +178,6 @@ export function ModelViewer({ fileApi, kind, fileName }: Props) {
         <OrbitControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.1} />
       </Canvas>
 
-      {/* Toolbar */}
       <div className="absolute right-2 top-2 flex gap-1">
         <button
           type="button"
