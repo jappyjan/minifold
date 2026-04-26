@@ -10,6 +10,7 @@ import {
 import { isHiddenEntry } from "@/server/browse/hidden";
 import { sortEntries } from "@/server/browse/sort";
 import { findFolderDescription } from "@/server/browse/description-file";
+import { decodePathSegments } from "@/server/browse/encode-path";
 import { Breadcrumbs } from "@/components/browse/Breadcrumbs";
 import { FolderGrid } from "@/components/browse/FolderGrid";
 import { FolderDescription } from "@/components/browse/FolderDescription";
@@ -22,7 +23,9 @@ export default async function BrowsePage({
 }: {
   params: Promise<Params>;
 }) {
-  const { provider: slug, path: segments = [] } = await params;
+  const { provider: slug, path: rawSegments = [] } = await params;
+  const segments = decodePathSegments(rawSegments);
+  if (!segments) notFound();
   const row = findProviderBySlug(getDatabase(), slug);
   if (!row) notFound();
   const provider = providerFromRow(row);

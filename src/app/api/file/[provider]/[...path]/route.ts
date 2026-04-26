@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/server/auth/current-user";
 import { loadProvider } from "@/server/browse/load-provider";
 import { mimeFor } from "@/server/browse/mime";
+import { decodePathSegments } from "@/server/browse/encode-path";
 import {
   NotFoundError,
   PathTraversalError,
@@ -14,12 +15,14 @@ export async function GET(req: Request, ctx: Ctx) {
   const user = await getCurrentUser();
   if (!user) return new Response("Unauthorized", { status: 401 });
 
-  const { provider: slug, path: segments } = await ctx.params;
+  const { provider: slug, path: rawSegments } = await ctx.params;
+  const segments = decodePathSegments(rawSegments ?? []);
+  if (!segments) return new Response("Bad Request", { status: 400 });
   const provider = loadProvider(slug);
   if (!provider) return new Response("Not Found", { status: 404 });
 
-  const path = (segments ?? []).join("/");
-  const fileName = segments?.[segments.length - 1] ?? "";
+  const path = segments.join("/");
+  const fileName = segments[segments.length - 1] ?? "";
 
   let entry;
   try {
