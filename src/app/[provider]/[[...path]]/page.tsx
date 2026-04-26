@@ -10,11 +10,12 @@ import {
 } from "@/server/storage/types";
 import { isHiddenEntry } from "@/server/browse/hidden";
 import { sortEntries } from "@/server/browse/sort";
+import { computeDirHash } from "@/server/browse/dir-hash";
 import { findFolderDescription } from "@/server/browse/description-file";
 import { findSidecarMarkdowns } from "@/server/browse/find-sidecars";
 import { decodePathSegments } from "@/server/browse/encode-path";
 import { Breadcrumbs } from "@/components/browse/Breadcrumbs";
-import { FolderGrid } from "@/components/browse/FolderGrid";
+import { FolderBrowser } from "@/components/browse/FolderBrowser";
 import { FolderDescription } from "@/components/browse/FolderDescription";
 import { FileDetail } from "@/components/browse/FileDetail";
 
@@ -50,16 +51,10 @@ export default async function BrowsePage({
 
   if (entry.type === "directory") {
     const allEntries = await provider.list(path);
-    const visible = allEntries.filter((e) => !isHiddenEntry(e.name));
+    const hash = computeDirHash(allEntries);
+    const visible = sortEntries(allEntries.filter((e) => !isHiddenEntry(e.name)));
     const description = findFolderDescription(visible);
     const sidecars = findSidecarMarkdowns(visible);
-    const grid = sortEntries(
-      visible.filter((e) => {
-        if (description && e.name === description.name) return false;
-        if (!showAll && sidecars.has(e.name)) return false;
-        return true;
-      }),
-    );
     return (
       <div className="flex flex-col gap-4">
         <Breadcrumbs
@@ -86,10 +81,14 @@ export default async function BrowsePage({
             </Link>
           </div>
         )}
-        <FolderGrid
+        <FolderBrowser
           providerSlug={slug}
+          path={path}
           parentPath={path}
-          entries={grid}
+          initialEntries={visible}
+          initialHash={hash}
+          descriptionName={description?.name ?? null}
+          sidecarNames={showAll ? [] : Array.from(sidecars)}
         />
       </div>
     );
