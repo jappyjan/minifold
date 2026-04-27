@@ -18,12 +18,25 @@ describe("fileKindOf", () => {
     expect(fileKindOf("benchy.3mf")).toBe("3mf");
   });
 
+  it("recognises additional 3D formats", () => {
+    expect(fileKindOf("part.step")).toBe("step");
+    expect(fileKindOf("part.stp")).toBe("step");
+    expect(fileKindOf("mesh.obj")).toBe("obj");
+    expect(fileKindOf("print.gcode")).toBe("gcode");
+    expect(fileKindOf("print.bgcode")).toBe("bgcode");
+    expect(fileKindOf("design.f3d")).toBe("f3d");
+  });
+
   it("recognises images", () => {
     expect(fileKindOf("photo.jpg")).toBe("image");
     expect(fileKindOf("photo.jpeg")).toBe("image");
     expect(fileKindOf("photo.png")).toBe("image");
     expect(fileKindOf("photo.webp")).toBe("image");
     expect(fileKindOf("photo.gif")).toBe("image");
+  });
+
+  it("recognises SVG as image", () => {
+    expect(fileKindOf("logo.svg")).toBe("image");
   });
 
   it("falls back to other for unknown extensions", () => {
