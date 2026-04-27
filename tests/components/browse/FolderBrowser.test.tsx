@@ -1,40 +1,12 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import "fake-indexeddb/auto";
 import {
   getCachedDir,
   IDB_DB_NAME,
-  setCachedDir,
 } from "@/lib/dir-cache-idb";
 import type { Entry } from "@/server/storage/types";
-
-type QueryState = {
-  data: unknown | undefined;
-  error: Error | null;
-};
-
-const mockQueryState: QueryState = { data: undefined, error: null };
-const lastInputRef: { input: unknown } = { input: undefined };
-
-vi.mock("@/trpc/client", () => ({
-  trpc: {
-    browse: {
-      list: {
-        useQuery: (input: unknown, options?: { enabled?: boolean }) => {
-          if (options?.enabled === false) {
-            // Mimic React Query: disabled queries return no data.
-            return { data: undefined, error: null };
-          }
-          lastInputRef.input = input;
-          return mockQueryState;
-        },
-      },
-    },
-  },
-}));
-
-// Vitest hoists vi.mock() calls above the imports, so this picks up the stub.
 import { FolderBrowser } from "@/components/browse/FolderBrowser";
 
 function file(name: string): Entry {
@@ -52,13 +24,10 @@ function deleteDb(): Promise<void> {
 
 beforeEach(async () => {
   await deleteDb();
-  mockQueryState.data = undefined;
-  mockQueryState.error = null;
-  lastInputRef.input = undefined;
 });
 
 describe("FolderBrowser", () => {
-  it("renders initialEntries immediately when no cache exists and no data yet", () => {
+  it("renders initialEntries", () => {
     render(
       <FolderBrowser
         providerSlug="nas"
@@ -73,157 +42,78 @@ describe("FolderBrowser", () => {
     expect(screen.getByText("a.stl")).toBeInTheDocument();
   });
 
-  it("renders cached entries from IDB when present (overrides initialEntries)", async () => {
-    await setCachedDir("nas/", {
-      hash: "cached",
-      entries: [file("from-cache.stl")],
-      cachedAt: 1,
-    });
-    render(
-      <FolderBrowser
-        providerSlug="nas"
-        path=""
-        parentPath=""
-        initialHash="initial"
-        initialEntries={[file("from-initial.stl")]}
-        descriptionName={null}
-        sidecarNames={[]}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByText("from-cache.stl")).toBeInTheDocument(),
-    );
-  });
-
-  it("updates entries and writes IDB when tRPC returns changed:true", async () => {
-    mockQueryState.data = {
-      changed: true,
-      hash: "h2",
-      entries: [file("fresh.stl")],
-    };
+  it("filters out description and sidecar entries from the grid", () => {
     render(
       <FolderBrowser
         providerSlug="nas"
         path=""
         parentPath=""
         initialHash="h1"
-        initialEntries={[file("stale.stl")]}
-        descriptionName={null}
-        sidecarNames={[]}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByText("fresh.stl")).toBeInTheDocument(),
-    );
-    expect(screen.queryByText("stale.stl")).not.toBeInTheDocument();
-    await waitFor(async () => {
-      const cached = await getCachedDir("nas/");
-      expect(cached?.hash).toBe("h2");
-      expect(cached?.entries.map((e) => e.name)).toEqual(["fresh.stl"]);
-    });
-  });
-
-  it("seeds IDB from initialEntries when tRPC returns changed:false and there was no cache", async () => {
-    mockQueryState.data = { changed: false, hash: "h-init" };
-    render(
-      <FolderBrowser
-        providerSlug="nas"
-        path=""
-        parentPath=""
-        initialHash="h-init"
-        initialEntries={[file("a.stl"), file("b.stl")]}
-        descriptionName={null}
-        sidecarNames={[]}
-      />,
-    );
-    await waitFor(async () => {
-      const cached = await getCachedDir("nas/");
-      expect(cached?.hash).toBe("h-init");
-      expect(cached?.entries.map((e) => e.name)).toEqual(["a.stl", "b.stl"]);
-    });
-  });
-
-  it("filters out description and sidecar entries from the grid", async () => {
-    mockQueryState.data = {
-      changed: true,
-      hash: "h2",
-      entries: [
-        file("readme.md"), // description
-        file("anchor.stl"),
-        file("anchor.md"), // sidecar
-      ],
-    };
-    render(
-      <FolderBrowser
-        providerSlug="nas"
-        path=""
-        parentPath=""
-        initialHash="h1"
-        initialEntries={[file("anchor.stl")]}
+        initialEntries={[file("readme.md"), file("anchor.stl"), file("anchor.md")]}
         descriptionName="readme.md"
         sidecarNames={["anchor.md"]}
       />,
     );
-    await waitFor(() =>
-      expect(screen.getByText("anchor.stl")).toBeInTheDocument(),
-    );
+    expect(screen.getByText("anchor.stl")).toBeInTheDocument();
     expect(screen.queryByText("readme.md")).not.toBeInTheDocument();
     expect(screen.queryByText("anchor.md")).not.toBeInTheDocument();
   });
 
-  it("uses initialHash as knownHash when no IDB cache exists", async () => {
-    render(
-      <FolderBrowser
-        providerSlug="nas"
-        path="prints"
-        parentPath="prints"
-        initialHash="known-hash"
-        initialEntries={[]}
-        descriptionName={null}
-        sidecarNames={[]}
-      />,
-    );
-    await waitFor(() =>
-      expect(lastInputRef.input).toMatchObject({
-        providerSlug: "nas",
-        path: "prints",
-        knownHash: "known-hash",
-      }),
-    );
-  });
-
-  it("uses cached hash as knownHash when IDB cache exists (so stale caches get revalidated)", async () => {
-    await setCachedDir("nas/", {
-      hash: "stale-cached-hash",
-      entries: [file("from-cache.stl")],
-      cachedAt: 1,
-    });
-    // Server detects mismatch and returns fresh entries.
-    mockQueryState.data = {
-      changed: true,
-      hash: "fresh-hash",
-      entries: [file("fresh.stl")],
-    };
+  it("seeds IDB with initialEntries and initialHash on mount", async () => {
     render(
       <FolderBrowser
         providerSlug="nas"
         path=""
         parentPath=""
-        initialHash="initial-different-hash"
-        initialEntries={[file("from-initial.stl")]}
+        initialHash="h1"
+        initialEntries={[file("a.stl")]}
         descriptionName={null}
         sidecarNames={[]}
       />,
     );
-    await waitFor(() =>
-      expect(lastInputRef.input).toMatchObject({
-        providerSlug: "nas",
-        path: "",
-        knownHash: "stale-cached-hash",
-      }),
+    await waitFor(async () => {
+      const cached = await getCachedDir("nas/");
+      expect(cached).not.toBeNull();
+      expect(cached?.hash).toBe("h1");
+      expect(cached?.entries.map((e) => e.name)).toEqual(["a.stl"]);
+      expect(typeof cached?.cachedAt).toBe("number");
+    });
+  });
+
+  it("re-seeds IDB when initialHash changes", async () => {
+    const { rerender } = render(
+      <FolderBrowser
+        providerSlug="nas"
+        path=""
+        parentPath=""
+        initialHash="h1"
+        initialEntries={[file("a.stl")]}
+        descriptionName={null}
+        sidecarNames={[]}
+      />,
     );
-    await waitFor(() =>
-      expect(screen.getByText("fresh.stl")).toBeInTheDocument(),
+
+    await waitFor(async () => {
+      const cached = await getCachedDir("nas/");
+      expect(cached?.hash).toBe("h1");
+    });
+
+    rerender(
+      <FolderBrowser
+        providerSlug="nas"
+        path=""
+        parentPath=""
+        initialHash="h2"
+        initialEntries={[file("b.stl")]}
+        descriptionName={null}
+        sidecarNames={[]}
+      />,
     );
+
+    await waitFor(async () => {
+      const cached = await getCachedDir("nas/");
+      expect(cached?.hash).toBe("h2");
+      expect(cached?.entries.map((e) => e.name)).toEqual(["b.stl"]);
+    });
   });
 });
