@@ -98,7 +98,7 @@ export default async function BrowsePage({
   // File detail page — load siblings for sidecar lookup.
   const parentSegments = segments.slice(0, -1);
   const parentPath = parentSegments.join("/");
-  const siblings = (await provider.list(parentPath)).filter(
+  const siblings = (await listWithCache(provider, parentPath)).filter(
     (e) => !isHiddenEntry(e.name),
   );
 
