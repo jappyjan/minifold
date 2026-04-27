@@ -7,12 +7,14 @@ import { __resetDatabase, getDatabase } from "@/server/db";
 import { createProvider } from "@/server/db/providers";
 import { createUser, type UserRow } from "@/server/db/users";
 import { getDirCache } from "@/server/db/dir-cache";
+import { __clearListCache } from "@/server/browse/list-cache";
 
 let tmp: string;
 let storageRoot: string;
 let user: UserRow;
 
 beforeEach(() => {
+  __clearListCache();
   tmp = mkdtempSync(join(tmpdir(), "minifold-browse-trpc-"));
   storageRoot = join(tmp, "files");
   mkdirSync(storageRoot, { recursive: true });

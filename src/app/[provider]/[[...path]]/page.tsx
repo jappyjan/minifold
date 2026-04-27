@@ -14,6 +14,7 @@ import { computeDirHash } from "@/server/browse/dir-hash";
 import { findFolderDescription } from "@/server/browse/description-file";
 import { findSidecarMarkdowns } from "@/server/browse/find-sidecars";
 import { decodePathSegments } from "@/server/browse/encode-path";
+import { listWithCache } from "@/server/browse/list-cache";
 import { Breadcrumbs } from "@/components/browse/Breadcrumbs";
 import { FolderBrowser } from "@/components/browse/FolderBrowser";
 import { FolderDescription } from "@/components/browse/FolderDescription";
@@ -50,7 +51,7 @@ export default async function BrowsePage({
   }
 
   if (entry.type === "directory") {
-    const allEntries = await provider.list(path);
+    const allEntries = await listWithCache(provider, path);
     const hash = computeDirHash(allEntries);
     const visible = sortEntries(allEntries.filter((e) => !isHiddenEntry(e.name)));
     const description = findFolderDescription(visible);

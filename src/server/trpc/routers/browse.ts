@@ -12,6 +12,7 @@ import {
   PathTraversalError,
   type Entry,
 } from "@/server/storage/types";
+import { listWithCache } from "@/server/browse/list-cache";
 
 export const browseRouter = router({
   list: protectedProcedure
@@ -28,7 +29,7 @@ export const browseRouter = router({
 
       let raw: Entry[];
       try {
-        raw = await provider.list(input.path);
+        raw = await listWithCache(provider, input.path);
       } catch (err) {
         if (err instanceof NotFoundError || err instanceof PathTraversalError) {
           throw new TRPCError({ code: "NOT_FOUND" });
