@@ -46,7 +46,15 @@ function buildPageHtml(): string {
   const THREE_PKG_PATH = require.resolve("three", { paths: [__dirname] });
   const THREE_PKG_ROOT = dirname(dirname(THREE_PKG_PATH));
   const THREE_CORE_PATH = resolve(THREE_PKG_ROOT, "build/three.core.js");
-  const threeSrc = readFileSync(THREE_CORE_PATH, "utf8");
+  const THREE_MODULE_PATH = resolve(THREE_PKG_ROOT, "build/three.module.js");
+  const threeCoreSrc = readFileSync(THREE_CORE_PATH, "utf8");
+  const threeModuleSrcRaw = readFileSync(THREE_MODULE_PATH, "utf8");
+  // three.module.js imports core via a relative path that can't be resolved
+  // from a data URL. Patch it to a bare specifier we control in the import map.
+  const threeModuleSrc = threeModuleSrcRaw.replace(
+    /from ['"]\.\/three\.core\.js['"]/g,
+    `from "__three_core__"`,
+  );
   const stlSrc = readModule("three/examples/jsm/loaders/STLLoader.js");
   // 3MFLoader uses a relative import '../libs/fflate.module.js'.
   // We patch it to the bare specifier 'fflate' which we map in the import map.
@@ -59,7 +67,8 @@ function buildPageHtml(): string {
 
   const importMap = JSON.stringify({
     imports: {
-      three: toDataUrl(threeSrc),
+      three: toDataUrl(threeModuleSrc),
+      __three_core__: toDataUrl(threeCoreSrc),
       "three/examples/jsm/loaders/STLLoader.js": toDataUrl(stlSrc),
       "three/examples/jsm/loaders/3MFLoader.js": toDataUrl(tmfSrc),
       fflate: toDataUrl(fflate),
