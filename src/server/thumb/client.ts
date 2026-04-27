@@ -1,5 +1,5 @@
 export class ThumbnailServiceError extends Error {
-  constructor(message: string, readonly cause?: unknown) {
+  constructor(message: string, override readonly cause?: unknown) {
     super(message);
     this.name = "ThumbnailServiceError";
   }
