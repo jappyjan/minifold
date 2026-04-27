@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Minifold
 
-## Getting Started
+Self-hosted file browser for 3D print files (STL, 3MF), documents (Markdown, PDF), and arbitrary folder structures.
 
-First, run the development server:
+## Deployment
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Two ways to run Minifold from prebuilt images on GHCR.
+
+### Minimal — single container, no thumbnails
+
+The smallest deployment. 3D models render via icons in the grid; the interactive 3D viewer still works on file detail pages.
+
+```yaml
+services:
+  minifold:
+    image: ghcr.io/jappyjan/minifold:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_PATH: /data/minifold.db
+    volumes:
+      - minifold-data:/data
+    ports:
+      - "3000:3000"
+
+volumes:
+  minifold-data:
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Full — with server-side thumbnail rendering
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Adds a second container (`minifold-thumbs`) running headless Chromium + Three.js. Thumbnails for `.stl` and `.3mf` files are generated lazily on first request and cached as `.minifold_thumb_<filename>.webp` sidecars next to the source files.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The full template is in [`docker-compose.example.yml`](docker-compose.example.yml). To enable thumbnails, set `MINIFOLD_THUMB_SERVICE_URL` on the main app to point at the worker (the example uses an internal Docker network so the worker is never exposed publicly).
 
-## Learn More
+```bash
+docker compose -f docker-compose.example.yml up -d
+```
 
-To learn more about Next.js, take a look at the following resources:
+### Toggling thumbnails on/off
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+The main image checks `MINIFOLD_THUMB_SERVICE_URL` at runtime. If unset (or empty), the `/api/thumb/*` endpoint returns 404 and the grid falls back to type icons. No code change or rebuild needed — flip the env var and restart the main container.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Development
 
-## Deploy on Vercel
+```bash
+pnpm install
+pnpm dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Open <http://localhost:3000>. The first run launches a setup wizard to create the admin user and configure storage providers.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Testing:
+
+```bash
+pnpm test                                   # main app
+pnpm --filter @minifold/thumb-worker test   # worker
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+## Project structure
+
+- `src/` — Next.js app (App Router), tRPC server, storage providers (local FS + S3).
+- `thumb-worker/` — optional thumbnail rendering service (Puppeteer + Three.js). Built into a separate Docker image.
+- `docs/superpowers/` — design specs and implementation plans.
+- `bin/cli.mjs` — admin CLI for user/provider management.
