@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { getCurrentUser } from "@/server/auth/current-user";
 import { loadProvider } from "@/server/browse/load-provider";
 import { decodePathSegments } from "@/server/browse/encode-path";

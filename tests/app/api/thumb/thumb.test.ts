@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { NextRequest } from "next/server";
 import { createDatabase } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import { createProvider } from "@/server/db/providers";
@@ -100,7 +101,7 @@ describe("GET /api/thumb/[provider]/[...path]", () => {
       "@/app/api/thumb/[provider]/[...path]/route"
     );
     const res = await GET(
-      new Request("http://x/api/thumb/nas/prints/anchor.stl") as any,
+      new Request("http://x/api/thumb/nas/prints/anchor.stl") as unknown as NextRequest,
       await ctx("nas", ["prints", "anchor.stl"]),
     );
     expect(res.status).toBe(401);
@@ -113,7 +114,7 @@ describe("GET /api/thumb/[provider]/[...path]", () => {
       "@/app/api/thumb/[provider]/[...path]/route"
     );
     const res = await GET(
-      new Request("http://x/api/thumb/nas/prints/anchor.stl") as any,
+      new Request("http://x/api/thumb/nas/prints/anchor.stl") as unknown as NextRequest,
       await ctx("nas", ["prints", "anchor.stl"]),
     );
     expect(res.status).toBe(404);
@@ -125,7 +126,7 @@ describe("GET /api/thumb/[provider]/[...path]", () => {
       "@/app/api/thumb/[provider]/[...path]/route"
     );
     const res = await GET(
-      new Request("http://x/api/thumb/ghost/prints/anchor.stl") as any,
+      new Request("http://x/api/thumb/ghost/prints/anchor.stl") as unknown as NextRequest,
       await ctx("ghost", ["prints", "anchor.stl"]),
     );
     expect(res.status).toBe(404);
@@ -137,7 +138,7 @@ describe("GET /api/thumb/[provider]/[...path]", () => {
       "@/app/api/thumb/[provider]/[...path]/route"
     );
     const res = await GET(
-      new Request("http://x/api/thumb/nas/notes.txt") as any,
+      new Request("http://x/api/thumb/nas/notes.txt") as unknown as NextRequest,
       await ctx("nas", ["notes.txt"]),
     );
     expect(res.status).toBe(400);
@@ -156,7 +157,7 @@ describe("GET /api/thumb/[provider]/[...path]", () => {
       "@/app/api/thumb/[provider]/[...path]/route"
     );
     const res = await GET(
-      new Request("http://x/api/thumb/nas/prints/anchor.stl") as any,
+      new Request("http://x/api/thumb/nas/prints/anchor.stl") as unknown as NextRequest,
       await ctx("nas", ["prints", "anchor.stl"]),
     );
     expect(res.status).toBe(200);
@@ -174,7 +175,7 @@ describe("GET /api/thumb/[provider]/[...path]", () => {
       "@/app/api/thumb/[provider]/[...path]/route"
     );
     const res = await GET(
-      new Request("http://x/api/thumb/nas/prints/anchor.stl") as any,
+      new Request("http://x/api/thumb/nas/prints/anchor.stl") as unknown as NextRequest,
       await ctx("nas", ["prints", "anchor.stl"]),
     );
     expect(res.status).toBe(200);
@@ -207,7 +208,7 @@ describe("GET /api/thumb/[provider]/[...path]", () => {
       "@/app/api/thumb/[provider]/[...path]/route"
     );
     const res = await GET(
-      new Request("http://x/api/thumb/nas/prints/anchor.stl") as any,
+      new Request("http://x/api/thumb/nas/prints/anchor.stl") as unknown as NextRequest,
       await ctx("nas", ["prints", "anchor.stl"]),
     );
     expect(res.status).toBe(502);
