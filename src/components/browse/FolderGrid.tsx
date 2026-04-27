@@ -5,9 +5,15 @@ type Props = {
   providerSlug: string;
   parentPath: string;
   entries: readonly Entry[];
+  thumbnailsEnabled: boolean;
 };
 
-export function FolderGrid({ providerSlug, parentPath, entries }: Props) {
+export function FolderGrid({
+  providerSlug,
+  parentPath,
+  entries,
+  thumbnailsEnabled,
+}: Props) {
   if (entries.length === 0) {
     return (
       <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -23,6 +29,7 @@ export function FolderGrid({ providerSlug, parentPath, entries }: Props) {
           providerSlug={providerSlug}
           parentPath={parentPath}
           entry={e}
+          thumbnailsEnabled={thumbnailsEnabled}
         />
       ))}
     </div>

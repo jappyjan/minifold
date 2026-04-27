@@ -15,6 +15,7 @@ import { findFolderDescription } from "@/server/browse/description-file";
 import { findSidecarMarkdowns } from "@/server/browse/find-sidecars";
 import { decodePathSegments } from "@/server/browse/encode-path";
 import { listWithCache } from "@/server/browse/list-cache";
+import { isThumbnailServiceEnabled } from "@/server/thumb/config";
 import { Breadcrumbs } from "@/components/browse/Breadcrumbs";
 import { FolderBrowser } from "@/components/browse/FolderBrowser";
 import { FolderDescription } from "@/components/browse/FolderDescription";
@@ -90,6 +91,7 @@ export default async function BrowsePage({
           initialHash={hash}
           descriptionName={description?.name ?? null}
           sidecarNames={showAll ? [] : Array.from(sidecars)}
+          thumbnailsEnabled={isThumbnailServiceEnabled()}
         />
       </div>
     );

@@ -25,6 +25,7 @@ type Props = {
   initialHash: string;
   descriptionName: string | null;
   sidecarNames: readonly string[]; // already showAll-resolved by the page
+  thumbnailsEnabled: boolean;
 };
 
 function applyGridFilter(
@@ -62,6 +63,7 @@ export function FolderBrowser({
   initialHash,
   descriptionName,
   sidecarNames,
+  thumbnailsEnabled,
 }: Props) {
   const searchParams = useSearchParams();
   // Capture the ?show= param value at render time so we can pass it to the
@@ -105,6 +107,7 @@ export function FolderBrowser({
         providerSlug={providerSlug}
         parentPath={parentPath}
         entries={displayed}
+        thumbnailsEnabled={thumbnailsEnabled}
       />
     </div>
   );

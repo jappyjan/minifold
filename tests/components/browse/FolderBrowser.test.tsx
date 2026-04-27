@@ -48,6 +48,7 @@ function renderBrowser(entries: Entry[]) {
       initialEntries={entries}
       descriptionName={null}
       sidecarNames={[]}
+      thumbnailsEnabled={false}
     />,
   );
 }
@@ -68,6 +69,7 @@ describe("FolderBrowser", () => {
         initialEntries={[file("readme.md"), file("anchor.stl"), file("anchor.md")]}
         descriptionName="readme.md"
         sidecarNames={["anchor.md"]}
+        thumbnailsEnabled={false}
       />,
     );
     expect(screen.getByText("anchor.stl")).toBeInTheDocument();
@@ -103,6 +105,7 @@ describe("FolderBrowser", () => {
         initialEntries={[file("b.stl")]}
         descriptionName={null}
         sidecarNames={[]}
+        thumbnailsEnabled={false}
       />,
     );
 
