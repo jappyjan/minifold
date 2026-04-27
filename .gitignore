@@ -20,6 +20,7 @@ thumb-worker/node_modules
 
 # production
 /build
+thumb-worker/dist
 
 # misc
 .DS_Store
