@@ -1,11 +1,11 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { existsSync } from "node:fs";
 
-const chromiumPath =
-  process.env.PUPPETEER_EXECUTABLE_PATH ??
-  (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : null);
-
-const has = chromiumPath !== null;
+// This test exercises the real Puppeteer + Three.js render pipeline. It
+// requires a Chromium with working WebGL — typically only available locally.
+// Opt in by exporting THUMB_WORKER_LIVE_TEST=1 along with PUPPETEER_EXECUTABLE_PATH.
+// We don't gate on `existsSync("/usr/bin/chromium")` because GitHub Actions
+// runners ship a Chromium that exists but can't create a WebGL context.
+const has = process.env.THUMB_WORKER_LIVE_TEST === "1";
 
 afterAll(async () => {
   if (has) {
