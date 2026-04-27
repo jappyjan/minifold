@@ -141,6 +141,9 @@ importers:
       puppeteer-core:
         specifier: ^24.30.0
         version: 24.42.0
+      three:
+        specifier: ^0.184.0
+        version: 0.184.0
     devDependencies:
       '@types/node':
         specifier: ^20.0.0

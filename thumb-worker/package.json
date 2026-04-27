@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "p-queue": "^9.0.0",
-    "puppeteer-core": "^24.30.0"
+    "puppeteer-core": "^24.30.0",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
