@@ -1,5 +1,5 @@
 import { createServer as createHttpServer, type Server } from "node:http";
-import { ThumbQueue } from "./queue";
+import { ThumbQueue } from "./queue.js";
 
 export type RenderFn = (
   data: Buffer,

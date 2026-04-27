@@ -11,62 +11,51 @@
  * The 3MFLoader imports fflate via a relative path (`../libs/fflate.module.js`).
  * We patch that to a bare specifier `fflate` which is also in the import map.
  */
-
-import puppeteer, { type Browser } from "puppeteer-core";
+import puppeteer from "puppeteer-core";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
-
 // ---------------------------------------------------------------------------
 // Module loading — resolve from thumb-worker's own node_modules (hoisted to
 // repo root in practice, but createRequire handles both).
 // ---------------------------------------------------------------------------
-
-function readModule(specifier: string): string {
-  const resolved = require.resolve(specifier);
-  return readFileSync(resolved, "utf8");
+function readModule(specifier) {
+    const resolved = require.resolve(specifier);
+    return readFileSync(resolved, "utf8");
 }
-
-function toDataUrl(src: string): string {
-  const b64 = Buffer.from(src, "utf8").toString("base64");
-  return `data:text/javascript;base64,${b64}`;
+function toDataUrl(src) {
+    const b64 = Buffer.from(src, "utf8").toString("base64");
+    return `data:text/javascript;base64,${b64}`;
 }
-
 /** Build import-map HTML + inline module script, constructed once at startup. */
-function buildPageHtml(): string {
-  // three/build/three.core.js is NOT in three's exports map, so we can't use
-  // require.resolve("three/build/three.core.js"). Instead, resolve three's
-  // main entry point (which lands at <pkg-root>/build/three.cjs) and go up
-  // two levels to get the package root, then derive the core build path.
-  const THREE_PKG_PATH = require.resolve("three", { paths: [__dirname] });
-  const THREE_PKG_ROOT = dirname(dirname(THREE_PKG_PATH));
-  const THREE_CORE_PATH = resolve(THREE_PKG_ROOT, "build/three.core.js");
-  const threeSrc = readFileSync(THREE_CORE_PATH, "utf8");
-  const stlSrc = readModule("three/examples/jsm/loaders/STLLoader.js");
-  // 3MFLoader uses a relative import '../libs/fflate.module.js'.
-  // We patch it to the bare specifier 'fflate' which we map in the import map.
-  const tmfSrcRaw = readModule("three/examples/jsm/loaders/3MFLoader.js");
-  const tmfSrc = tmfSrcRaw.replace(
-    /from\s+['"]\.\.\/libs\/fflate\.module\.js['"]/g,
-    "from 'fflate'",
-  );
-  const fflate = readModule("three/examples/jsm/libs/fflate.module.js");
-
-  const importMap = JSON.stringify({
-    imports: {
-      three: toDataUrl(threeSrc),
-      "three/examples/jsm/loaders/STLLoader.js": toDataUrl(stlSrc),
-      "three/examples/jsm/loaders/3MFLoader.js": toDataUrl(tmfSrc),
-      fflate: toDataUrl(fflate),
-    },
-  });
-
-  return /* html */ `<!DOCTYPE html>
+function buildPageHtml() {
+    // three/build/three.core.js is NOT in three's exports map, so we can't use
+    // require.resolve("three/build/three.core.js"). Instead, resolve three's
+    // main entry point (which lands at <pkg-root>/build/three.cjs) and go up
+    // two levels to get the package root, then derive the core build path.
+    const THREE_PKG_PATH = require.resolve("three", { paths: [__dirname] });
+    const THREE_PKG_ROOT = dirname(dirname(THREE_PKG_PATH));
+    const THREE_CORE_PATH = resolve(THREE_PKG_ROOT, "build/three.core.js");
+    const threeSrc = readFileSync(THREE_CORE_PATH, "utf8");
+    const stlSrc = readModule("three/examples/jsm/loaders/STLLoader.js");
+    // 3MFLoader uses a relative import '../libs/fflate.module.js'.
+    // We patch it to the bare specifier 'fflate' which we map in the import map.
+    const tmfSrcRaw = readModule("three/examples/jsm/loaders/3MFLoader.js");
+    const tmfSrc = tmfSrcRaw.replace(/from\s+['"]\.\.\/libs\/fflate\.module\.js['"]/g, "from 'fflate'");
+    const fflate = readModule("three/examples/jsm/libs/fflate.module.js");
+    const importMap = JSON.stringify({
+        imports: {
+            three: toDataUrl(threeSrc),
+            "three/examples/jsm/loaders/STLLoader.js": toDataUrl(stlSrc),
+            "three/examples/jsm/loaders/3MFLoader.js": toDataUrl(tmfSrc),
+            fflate: toDataUrl(fflate),
+        },
+    });
+    return /* html */ `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body>
@@ -140,84 +129,61 @@ window.__threeReady = true;
 </body>
 </html>`;
 }
-
 // Build the HTML once at module load time (not per-request).
-let _pageHtml: string | null = null;
-function getPageHtml(): string {
-  if (!_pageHtml) _pageHtml = buildPageHtml();
-  return _pageHtml;
+let _pageHtml = null;
+function getPageHtml() {
+    if (!_pageHtml)
+        _pageHtml = buildPageHtml();
+    return _pageHtml;
 }
-
 // ---------------------------------------------------------------------------
 // Browser lifecycle — one shared Browser, new Page per render.
 // ---------------------------------------------------------------------------
-
-let browserPromise: Promise<Browser> | null = null;
-
-function getBrowser(): Promise<Browser> {
-  if (!browserPromise) {
-    browserPromise = puppeteer.launch({
-      executablePath:
-        process.env.PUPPETEER_EXECUTABLE_PATH ?? "/usr/bin/chromium",
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--use-gl=swiftshader",
-        "--disable-gpu",
-      ],
-    });
-  }
-  return browserPromise;
+let browserPromise = null;
+function getBrowser() {
+    if (!browserPromise) {
+        browserPromise = puppeteer.launch({
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH ?? "/usr/bin/chromium",
+            headless: true,
+            args: [
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--use-gl=swiftshader",
+                "--disable-gpu",
+            ],
+        });
+    }
+    return browserPromise;
 }
-
-export async function shutdownBrowser(): Promise<void> {
-  if (browserPromise) {
-    const b = await browserPromise;
-    await b.close();
-    browserPromise = null;
-  }
+export async function shutdownBrowser() {
+    if (browserPromise) {
+        const b = await browserPromise;
+        await b.close();
+        browserPromise = null;
+    }
 }
-
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
-
-export async function renderThumbnail(
-  data: Buffer,
-  format: "stl" | "3mf",
-): Promise<Buffer> {
-  const browser = await getBrowser();
-  const page = await browser.newPage();
-
-  try {
-    // Set content and wait for the module script to finish running.
-    await page.setContent(getPageHtml(), { waitUntil: "domcontentloaded" });
-
-    // Poll for the ready flag set at the end of the module script.
-    await page.waitForFunction("window.__threeReady === true", {
-      timeout: 30_000,
-    });
-
-    const dataUrl = await page.evaluate(
-      async (bytes: number[], fmt: string) => {
-        // page.evaluate runs in browser context; globalThis === window there.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return ((globalThis as any).renderModel as (b: Uint8Array, f: string) => Promise<string>)(
-          new Uint8Array(bytes),
-          fmt,
-        );
-      },
-      Array.from(data),
-      format as string,
-    );
-
-    const base64 = (dataUrl as string).replace(
-      /^data:image\/webp;base64,/,
-      "",
-    );
-    return Buffer.from(base64, "base64");
-  } finally {
-    await page.close();
-  }
+export async function renderThumbnail(data, format) {
+    const browser = await getBrowser();
+    const page = await browser.newPage();
+    try {
+        // Set content and wait for the module script to finish running.
+        await page.setContent(getPageHtml(), { waitUntil: "domcontentloaded" });
+        // Poll for the ready flag set at the end of the module script.
+        await page.waitForFunction("window.__threeReady === true", {
+            timeout: 30_000,
+        });
+        const dataUrl = await page.evaluate(async (bytes, fmt) => {
+            // page.evaluate runs in browser context; globalThis === window there.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return globalThis.renderModel(new Uint8Array(bytes), fmt);
+        }, Array.from(data), format);
+        const base64 = dataUrl.replace(/^data:image\/webp;base64,/, "");
+        return Buffer.from(base64, "base64");
+    }
+    finally {
+        await page.close();
+    }
 }
