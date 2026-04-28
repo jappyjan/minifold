@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { protectedProcedure, router } from "../trpc";
-import { loadProvider } from "@/server/browse/load-provider";
+import { publicProcedure, router } from "../trpc";
 import { computeDirHash } from "@/server/browse/dir-hash";
 import { isHiddenEntry } from "@/server/browse/hidden";
 import { sortEntries } from "@/server/browse/sort";
@@ -13,9 +12,13 @@ import {
   type Entry,
 } from "@/server/storage/types";
 import { listWithCache } from "@/server/browse/list-cache";
+import { findProviderBySlug } from "@/server/db/providers";
+import { providerFromRow } from "@/server/storage/factory";
+import { createAccessResolver } from "@/server/access/resolver";
+import { getGlobalDefaultAccess } from "@/server/access/global-default";
 
 export const browseRouter = router({
-  list: protectedProcedure
+  list: publicProcedure
     .input(
       z.object({
         providerSlug: z.string().min(1),
@@ -23,9 +26,25 @@ export const browseRouter = router({
         knownHash: z.string().optional(),
       }),
     )
-    .query(async ({ input }) => {
-      const provider = loadProvider(input.providerSlug);
-      if (!provider) throw new TRPCError({ code: "NOT_FOUND" });
+    .query(async ({ input, ctx }) => {
+      const db = getDatabase();
+      const row = findProviderBySlug(db, input.providerSlug);
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+      const provider = providerFromRow(row);
+
+      const config = row.config as { defaultAccess?: "public" | "signed-in" };
+      const resolver = createAccessResolver({
+        user: ctx.currentUser,
+        storage: provider,
+        providerDefault: config.defaultAccess,
+        globalDefault: getGlobalDefaultAccess(db),
+      });
+
+      // Gate the directory itself first — if user can't see it, behave as 404.
+      const dirDecision = await resolver.resolve(input.path, "directory");
+      if (dirDecision !== "allow") {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
 
       let raw: Entry[];
       try {
@@ -39,13 +58,22 @@ export const browseRouter = router({
 
       const hash = computeDirHash(raw);
       const cacheKey = `${input.providerSlug}/${input.path}`;
-      upsertDirCache(getDatabase(), cacheKey, hash, Date.now());
+      upsertDirCache(db, cacheKey, hash, Date.now());
 
       if (input.knownHash === hash) {
         return { changed: false as const, hash };
       }
 
-      const visible = sortEntries(raw.filter((e) => !isHiddenEntry(e.name)));
-      return { changed: true as const, hash, entries: visible };
+      const visibleAfterHidden = raw.filter((e) => !isHiddenEntry(e.name));
+      const allowed: Entry[] = [];
+      for (const entry of visibleAfterHidden) {
+        const child =
+          input.path === "" ? entry.name : `${input.path}/${entry.name}`;
+        const decision = await resolver.resolve(child, entry.type);
+        if (decision === "allow") allowed.push(entry);
+      }
+
+      const sorted = sortEntries(allowed);
+      return { changed: true as const, hash, entries: sorted };
     }),
 });
