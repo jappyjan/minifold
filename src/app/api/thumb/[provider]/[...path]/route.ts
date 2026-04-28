@@ -1,11 +1,15 @@
 import type { NextRequest } from "next/server";
 import { getCurrentUser } from "@/server/auth/current-user";
-import { loadProvider } from "@/server/browse/load-provider";
 import { decodePathSegments } from "@/server/browse/encode-path";
 import { thumbSidecarPath } from "@/server/thumb/sidecar-name";
 import { getThumbnailServiceUrl } from "@/server/thumb/config";
 import { fetchThumbnail, ThumbnailServiceError } from "@/server/thumb/client";
 import { NotFoundError, PathTraversalError } from "@/server/storage/types";
+import { getDatabase } from "@/server/db";
+import { findProviderBySlug } from "@/server/db/providers";
+import { providerFromRow } from "@/server/storage/factory";
+import { createAccessResolver } from "@/server/access/resolver";
+import { getGlobalDefaultAccess } from "@/server/access/global-default";
 
 const SUPPORTED_EXT = new Set(["stl", "3mf"]);
 const TIMEOUT_MS = 30_000;
@@ -16,7 +20,6 @@ type Ctx = {
 
 export async function GET(_req: NextRequest, ctx: Ctx): Promise<Response> {
   const user = await getCurrentUser();
-  if (!user) return new Response("Unauthorized", { status: 401 });
 
   const { provider: slug, path: rawSegments = [] } = await ctx.params;
   const segments = decodePathSegments(rawSegments);
@@ -26,8 +29,21 @@ export async function GET(_req: NextRequest, ctx: Ctx): Promise<Response> {
   const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
   if (!SUPPORTED_EXT.has(ext)) return new Response("Unsupported", { status: 400 });
 
-  const provider = loadProvider(slug);
-  if (!provider) return new Response("Not Found", { status: 404 });
+  const row = findProviderBySlug(getDatabase(), slug);
+  if (!row) return new Response("Not Found", { status: 404 });
+  const provider = providerFromRow(row);
+
+  const config = row.config as { defaultAccess?: "public" | "signed-in" };
+  const resolver = createAccessResolver({
+    user,
+    storage: provider,
+    providerDefault: config.defaultAccess,
+    globalDefault: getGlobalDefaultAccess(getDatabase()),
+  });
+  const decision = await resolver.resolve(path, "file");
+  if (decision !== "allow") {
+    return new Response("Not Found", { status: 404 });
+  }
 
   const serviceUrl = getThumbnailServiceUrl();
   if (!serviceUrl) return new Response("Thumbnails Disabled", { status: 404 });

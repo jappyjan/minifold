@@ -94,7 +94,8 @@ async function stubFetchThumbnailError() {
 }
 
 describe("GET /api/thumb/[provider]/[...path]", () => {
-  it("7. 401 when unauthenticated", async () => {
+  it("7. 404 when unauthenticated on a signed-in path (no info leak)", async () => {
+    // Default global is 'signed-in' (seeded by migration 005). Anonymous → 404.
     const mod = await import("@/server/auth/current-user");
     vi.mocked(mod.getCurrentUser).mockResolvedValue(null);
     const { GET } = await import(
@@ -104,7 +105,7 @@ describe("GET /api/thumb/[provider]/[...path]", () => {
       new Request("http://x/api/thumb/nas/prints/anchor.stl") as unknown as NextRequest,
       await ctx("nas", ["prints", "anchor.stl"]),
     );
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(404);
   });
 
   it("1. 404 when thumbnail service env var is unset", async () => {
@@ -212,5 +213,69 @@ describe("GET /api/thumb/[provider]/[...path]", () => {
       await ctx("nas", ["prints", "anchor.stl"]),
     );
     expect(res.status).toBe(502);
+  });
+
+  it("8. 404 when an authed user is not on the user-list", async () => {
+    writeFileSync(
+      join(filesRoot, "prints", ".minifold_access.yaml"),
+      "overrides:\n  anchor.stl: [bob]\n",
+    );
+    await authedAsUser(); // username 'user', not on list
+    await stubFetchThumbnailOk(); // would succeed if we got past the resolver
+    const { GET } = await import(
+      "@/app/api/thumb/[provider]/[...path]/route"
+    );
+    const res = await GET(
+      new Request("http://x/api/thumb/nas/prints/anchor.stl") as unknown as NextRequest,
+      await ctx("nas", ["prints", "anchor.stl"]),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("9. admin gets the thumbnail even for an access-denied file", async () => {
+    writeFileSync(
+      join(filesRoot, "prints", ".minifold_access.yaml"),
+      "overrides:\n  anchor.stl: [bob]\n",
+    );
+    const mod = await import("@/server/auth/current-user");
+    vi.mocked(mod.getCurrentUser).mockResolvedValue({
+      id: "u-ad",
+      name: "Admin",
+      username: "ad",
+      role: "admin",
+      must_change_password: 0,
+      deactivated: 0,
+      created_at: 0,
+      last_login: null,
+      password: "x",
+    });
+    await stubFetchThumbnailOk();
+    const { GET } = await import(
+      "@/app/api/thumb/[provider]/[...path]/route"
+    );
+    const res = await GET(
+      new Request("http://x/api/thumb/nas/prints/anchor.stl") as unknown as NextRequest,
+      await ctx("nas", ["prints", "anchor.stl"]),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/webp");
+  });
+
+  it("10. anonymous gets thumbnail for a public file", async () => {
+    writeFileSync(
+      join(filesRoot, "prints", ".minifold_access.yaml"),
+      "overrides:\n  anchor.stl: public\n",
+    );
+    const mod = await import("@/server/auth/current-user");
+    vi.mocked(mod.getCurrentUser).mockResolvedValue(null);
+    await stubFetchThumbnailOk();
+    const { GET } = await import(
+      "@/app/api/thumb/[provider]/[...path]/route"
+    );
+    const res = await GET(
+      new Request("http://x/api/thumb/nas/prints/anchor.stl") as unknown as NextRequest,
+      await ctx("nas", ["prints", "anchor.stl"]),
+    );
+    expect(res.status).toBe(200);
   });
 });
