@@ -272,4 +272,34 @@ describe("createAccessResolver", () => {
     await r.resolve("a/b/extra.stl", "file");
     expect(reads).toBe(1);
   });
+
+  it("memoizes negative results — missing access file is checked once even across many resolves", async () => {
+    // No .minifold_access.yaml anywhere — all resolves fall through to globalDefault.
+    let existsCalls = 0;
+    const wrapped = new Proxy(storage, {
+      get(target, prop, recv) {
+        const v = Reflect.get(target, prop, recv);
+        if (prop === "exists") {
+          return async (p: string) => {
+            existsCalls++;
+            return v.call(target, p);
+          };
+        }
+        return v;
+      },
+    });
+    const r = createAccessResolver({
+      user: userAlice,
+      storage: wrapped as typeof storage,
+      providerDefault: undefined,
+      globalDefault: "signed-in",
+    });
+    // Two file resolves in same dir → one exists() per directory level walked.
+    // Path 'a/b/c.stl' walks dirs ['a/b', 'a', '']  → 3 exists() calls.
+    // Then 'a/b/extra.stl' should hit cache for all three → 0 more exists() calls.
+    await r.resolve("a/b/c.stl", "file");
+    const after1 = existsCalls;
+    await r.resolve("a/b/extra.stl", "file");
+    expect(existsCalls).toBe(after1);
+  });
 });
