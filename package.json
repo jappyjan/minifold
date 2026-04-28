@@ -31,6 +31,7 @@
     "superjson": "^2.2.6",
     "three": "^0.184.0",
     "three-stdlib": "^2.36.1",
+    "yaml": "^2.8.3",
     "zod": "^3.25.76"
   },
   "devDependencies": {
