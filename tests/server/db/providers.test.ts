@@ -115,6 +115,24 @@ describe("providers repository", () => {
     ).toThrow();
   });
 
+  it("roundtrips a local provider with defaultAccess", () => {
+    const created = createProvider(db, {
+      slug: "nas",
+      name: "NAS",
+      type: "local",
+      config: { rootPath: "/srv/files", defaultAccess: "public" },
+    });
+    expect(created.config).toEqual({
+      rootPath: "/srv/files",
+      defaultAccess: "public",
+    });
+    const found = findProviderBySlug(db, "nas");
+    expect(found?.config).toEqual({
+      rootPath: "/srv/files",
+      defaultAccess: "public",
+    });
+  });
+
   it("generateUniqueSlug skips reserved bases (admin → admin-2)", () => {
     expect(generateUniqueSlug(db, "Admin")).toBe("admin-2");
   });

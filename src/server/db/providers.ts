@@ -6,6 +6,7 @@ export type ProviderType = "local" | "s3";
 
 export type LocalConfig = {
   rootPath: string;
+  defaultAccess?: "public" | "signed-in";
 };
 
 export type S3Config = {
@@ -15,6 +16,7 @@ export type S3Config = {
   accessKeyId: string;
   secretAccessKey: string;
   pathStyle: boolean;
+  defaultAccess?: "public" | "signed-in";
 };
 
 export type ProviderConfig = LocalConfig | S3Config;
