@@ -67,7 +67,8 @@ async function authedAsUser() {
 }
 
 describe("GET /api/file/[provider]/[...path]", () => {
-  it("401s when not signed in", async () => {
+  it("404s on a signed-in path when not signed in (no info leak)", async () => {
+    // Default global is 'signed-in' (seeded by migration 005).
     const { getCurrentUser } = await import("@/server/auth/current-user");
     vi.mocked(getCurrentUser).mockResolvedValue(null);
     const { GET } = await import("@/app/api/file/[provider]/[...path]/route");
@@ -75,7 +76,7 @@ describe("GET /api/file/[provider]/[...path]", () => {
       new Request("http://x/api/file/nas/notes.md"),
       await ctx("nas", ["notes.md"]),
     );
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(404);
   });
 
   it("404s on unknown provider", async () => {
@@ -178,5 +179,59 @@ describe("GET /api/file/[provider]/[...path]", () => {
       await ctx("nas", ["..", "etc", "passwd"]),
     );
     expect(res.status).toBe(400);
+  });
+
+  it("streams a public file even when anonymous", async () => {
+    writeFileSync(
+      join(filesRoot, ".minifold_access.yaml"),
+      "default: signed-in\noverrides:\n  notes.md: public\n",
+    );
+    const { getCurrentUser } = await import("@/server/auth/current-user");
+    vi.mocked(getCurrentUser).mockResolvedValue(null);
+    const { GET } = await import("@/app/api/file/[provider]/[...path]/route");
+    const res = await GET(
+      new Request("http://x/api/file/nas/notes.md"),
+      await ctx("nas", ["notes.md"]),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("404s when an authed user is not on the user-list", async () => {
+    writeFileSync(
+      join(filesRoot, ".minifold_access.yaml"),
+      "overrides:\n  notes.md: [bob]\n",
+    );
+    await authedAsUser(); // username 'user', not on list
+    const { GET } = await import("@/app/api/file/[provider]/[...path]/route");
+    const res = await GET(
+      new Request("http://x/api/file/nas/notes.md"),
+      await ctx("nas", ["notes.md"]),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("admin can stream a denied file", async () => {
+    writeFileSync(
+      join(filesRoot, ".minifold_access.yaml"),
+      "overrides:\n  notes.md: [bob]\n",
+    );
+    const mod = await import("@/server/auth/current-user");
+    vi.mocked(mod.getCurrentUser).mockResolvedValue({
+      id: "u-ad",
+      name: "Admin",
+      username: "ad",
+      role: "admin",
+      must_change_password: 0,
+      deactivated: 0,
+      created_at: 0,
+      last_login: null,
+      password: "x",
+    });
+    const { GET } = await import("@/app/api/file/[provider]/[...path]/route");
+    const res = await GET(
+      new Request("http://x/api/file/nas/notes.md"),
+      await ctx("nas", ["notes.md"]),
+    );
+    expect(res.status).toBe(200);
   });
 });
