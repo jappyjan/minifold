@@ -111,4 +111,21 @@ describe("bundled migrations", () => {
       ["computed_at", "hash", "path"].sort(),
     );
   });
+
+  it("applies 005_seed_global_access and seeds global_default_access='signed-in'", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "minifold-init-"));
+    const db = createDatabase(join(tmp, "test.db"));
+    cleanup = () => {
+      db.close();
+      rmSync(tmp, { recursive: true, force: true });
+    };
+
+    const dir = resolve(process.cwd(), "src/server/db/migrations");
+    runMigrations(db, dir);
+
+    const row = db
+      .prepare("SELECT value FROM settings WHERE key = ?")
+      .get("global_default_access") as { value: string } | undefined;
+    expect(row?.value).toBe("signed-in");
+  });
 });
