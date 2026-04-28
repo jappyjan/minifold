@@ -1,14 +1,31 @@
 services:
   minifold:
-    build: .
-    image: minifold:local
-    ports:
-      - "3000:3000"
+    image: ghcr.io/jappyjan/minifold:latest
+    restart: unless-stopped
     environment:
-      DATABASE_PATH: /app/data/minifold.db
+      - SERVICE_FQDN_MINIFOLD_3000
+      - DATABASE_PATH=/app/data/minifold.db
+      - MINIFOLD_THUMB_SERVICE_URL=http://minifold-thumbs:3001
     volumes:
       - minifold-data:/app/data
+      - minifold-files:/files
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  minifold-thumbs:
+    image: ghcr.io/jappyjan/minifold-thumbs:latest
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 volumes:
   minifold-data:
+  minifold-files:
