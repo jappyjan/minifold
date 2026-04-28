@@ -2,6 +2,8 @@ services:
   minifold:
     image: ghcr.io/jappyjan/minifold:latest
     restart: unless-stopped
+    expose:
+      - "3000"
     environment:
       - SERVICE_FQDN_MINIFOLD_3000
       - DATABASE_PATH=/app/data/minifold.db
