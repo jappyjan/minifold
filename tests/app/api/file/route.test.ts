@@ -210,6 +210,23 @@ describe("GET /api/file/[provider]/[...path]", () => {
     expect(res.status).toBe(404);
   });
 
+  it("404s (not 400) on a directory path the user cannot see — no kind leak", async () => {
+    // Without the access check ahead of the type check, a denied dir path
+    // would 400 ("Bad Request — not a file") and leak its existence.
+    mkdirSync(join(filesRoot, "secret"));
+    writeFileSync(
+      join(filesRoot, "secret", ".minifold_access.yaml"),
+      "default: [bob]\n",
+    );
+    await authedAsUser(); // username 'user', not on list
+    const { GET } = await import("@/app/api/file/[provider]/[...path]/route");
+    const res = await GET(
+      new Request("http://x/api/file/nas/secret"),
+      await ctx("nas", ["secret"]),
+    );
+    expect(res.status).toBe(404);
+  });
+
   it("admin can stream a denied file", async () => {
     writeFileSync(
       join(filesRoot, ".minifold_access.yaml"),

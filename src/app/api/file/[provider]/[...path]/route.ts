@@ -41,10 +41,10 @@ export async function GET(req: Request, ctx: Ctx) {
     }
     throw err;
   }
-  if (entry.type !== "file") {
-    return new Response("Bad Request", { status: 400 });
-  }
 
+  // Access check before the file/directory discriminator: if the user can't
+  // see this entry (file OR directory), respond with 404 to avoid revealing
+  // its existence (or even its kind) via a 400-vs-404 distinction.
   const config = row.config as { defaultAccess?: "public" | "signed-in" };
   const resolver = createAccessResolver({
     user,
@@ -52,10 +52,14 @@ export async function GET(req: Request, ctx: Ctx) {
     providerDefault: config.defaultAccess,
     globalDefault: getGlobalDefaultAccess(getDatabase()),
   });
-  const decision = await resolver.resolve(path, "file");
+  const decision = await resolver.resolve(path, entry.type);
   if (decision !== "allow") {
     // API routes always 404 on denial — never reveal existence.
     return new Response("Not Found", { status: 404 });
+  }
+
+  if (entry.type !== "file") {
+    return new Response("Bad Request", { status: 400 });
   }
 
   let body;
