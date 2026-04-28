@@ -95,7 +95,7 @@ describe("parseAccessFile", () => {
     expect(out.overrides).toEqual({});
   });
 
-  it("rejects an empty user-list with a warning (still treated as user-list)", () => {
+  it("accepts an empty user-list as valid (zero usernames, admin still bypasses)", () => {
     // Spec: empty list = nobody allowed (admin still bypasses via resolver).
     // Parser treats `[]` as a valid user-list of zero usernames; the resolver
     // applies it. No warning here.
