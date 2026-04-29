@@ -15,8 +15,12 @@ services:
     # harmless noise — traefik would only honour them when routing through
     # Coolify's proxy.
     labels:
-      - "traefik.http.services.http-0-eoqo9ctdghx2bb5bi6zukkvd-minifold.loadbalancer.server.port=3000"
-      - "traefik.http.services.https-0-eoqo9ctdghx2bb5bi6zukkvd-minifold.loadbalancer.server.port=3000"
+      # One service with the port; both auto-generated routers point at it
+      # via explicit .service= overrides (auto-linking fails when more than
+      # one service is defined on a container).
+      - "traefik.http.services.minifold.loadbalancer.server.port=3000"
+      - "traefik.http.routers.http-0-eoqo9ctdghx2bb5bi6zukkvd-minifold.service=minifold"
+      - "traefik.http.routers.https-0-eoqo9ctdghx2bb5bi6zukkvd-minifold.service=minifold"
     environment:
       - SERVICE_FQDN_MINIFOLD_3000
       - DATABASE_PATH=/app/data/minifold.db
