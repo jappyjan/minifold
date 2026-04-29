@@ -37,4 +37,44 @@ describe("Thumbnail", () => {
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
     expect(screen.queryByTestId("fallback")).not.toBeInTheDocument();
   });
+
+  it("mounts the <img> with the given src after intersection", () => {
+    // Override default stub: this IO fires immediately on observe().
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        cb: (entries: { isIntersecting: boolean; target: Element }[]) => void;
+        constructor(
+          cb: (entries: { isIntersecting: boolean; target: Element }[]) => void,
+        ) {
+          this.cb = cb;
+        }
+        observe(el: Element) {
+          this.cb([{ isIntersecting: true, target: el }]);
+        }
+        disconnect() {}
+        unobserve() {}
+        takeRecords() {
+          return [];
+        }
+        root = null;
+        rootMargin = "";
+        thresholds: number[] = [];
+      },
+    );
+
+    render(
+      <Thumbnail
+        src="/api/thumb/nas/prints/anchor.stl"
+        className="h-12 w-12 rounded object-contain"
+        fallback={<div>fallback</div>}
+      />,
+    );
+
+    const img = screen.getByAltText("");
+    expect(img).toBeInTheDocument();
+    expect(img.getAttribute("src")).toBe("/api/thumb/nas/prints/anchor.stl");
+    // Skeleton still present (image hasn't loaded yet)
+    expect(screen.getByTestId("thumb-skeleton")).toBeInTheDocument();
+  });
 });

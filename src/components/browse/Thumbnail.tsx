@@ -9,7 +9,7 @@ type Props = {
   fallback: ReactNode;
 };
 
-export function Thumbnail({ src, alt = "", className, fallback }: Props) {
+export function Thumbnail({ src, alt = "", className, fallback: _fallback }: Props) {
   const skeletonRef = useRef<HTMLDivElement | null>(null);
   const [inView, setInView] = useState(false);
 
@@ -35,6 +35,14 @@ export function Thumbnail({ src, alt = "", className, fallback }: Props) {
 
   return (
     <div className={`${className ?? ""} relative overflow-hidden`}>
+      {inView && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={src}
+          alt={alt}
+          className="block h-full w-full object-contain"
+        />
+      )}
       <div
         ref={skeletonRef}
         data-testid="thumb-skeleton"
@@ -43,8 +51,6 @@ export function Thumbnail({ src, alt = "", className, fallback }: Props) {
       >
         <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent motion-safe:animate-[shimmer_1.4s_infinite] dark:via-white/10" />
       </div>
-      {/* Hidden suppressors — referenced props so TS doesn't complain on unused vars in this slice. */}
-      <span hidden>{src}{alt}{fallback ? null : null}</span>
     </div>
   );
 }
