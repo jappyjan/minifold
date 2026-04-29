@@ -159,4 +159,52 @@ describe("Thumbnail", () => {
     expect(screen.queryByAltText("")).not.toBeInTheDocument();
     expect(screen.queryByTestId("thumb-skeleton")).not.toBeInTheDocument();
   });
+
+  it("short-circuits to ready when img.complete is already true at mount", () => {
+    // Firing IO stub
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        cb: (entries: { isIntersecting: boolean; target: Element }[]) => void;
+        constructor(
+          cb: (entries: { isIntersecting: boolean; target: Element }[]) => void,
+        ) {
+          this.cb = cb;
+        }
+        observe(el: Element) {
+          this.cb([{ isIntersecting: true, target: el }]);
+        }
+        disconnect() {}
+        unobserve() {}
+        takeRecords() {
+          return [];
+        }
+        root = null;
+        rootMargin = "";
+        thresholds: number[] = [];
+      },
+    );
+
+    // Force HTMLImageElement.complete to return true so the ref callback
+    // sees a "cached" image at mount time.
+    const completeSpy = vi
+      .spyOn(HTMLImageElement.prototype, "complete", "get")
+      .mockReturnValue(true);
+
+    try {
+      render(
+        <Thumbnail
+          src="/api/thumb/nas/prints/anchor.stl"
+          className="h-12 w-12 rounded object-contain"
+          fallback={<div>fallback</div>}
+        />,
+      );
+
+      // Skeleton should be removed immediately, no fireEvent.load needed.
+      expect(screen.queryByTestId("thumb-skeleton")).not.toBeInTheDocument();
+      expect(screen.getByAltText("")).toBeInTheDocument();
+    } finally {
+      completeSpy.mockRestore();
+    }
+  });
 });

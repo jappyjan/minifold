@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 type Props = {
   src: string;
@@ -35,6 +35,19 @@ export function Thumbnail({ src, alt = "", className, fallback }: Props) {
     return () => obs.disconnect();
   }, [inView]);
 
+  // Defensive: reset transient state if src changes mid-life.
+  useEffect(() => {
+    setImgReady(false);
+    setErrored(false);
+  }, [src]);
+
+  // Callback ref: when the <img> element mounts, check if it's already
+  // loaded (cached). If so, short-circuit to ready — onLoad may not fire
+  // for cached images in some browsers.
+  const handleImgRef = useCallback((el: HTMLImageElement | null) => {
+    if (el?.complete) setImgReady(true);
+  }, []);
+
   if (errored) return <>{fallback}</>;
 
   return (
@@ -42,6 +55,7 @@ export function Thumbnail({ src, alt = "", className, fallback }: Props) {
       {inView && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          ref={handleImgRef}
           src={src}
           alt={alt}
           className="block h-full w-full object-contain"
