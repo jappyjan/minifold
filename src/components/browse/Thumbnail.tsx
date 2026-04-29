@@ -35,12 +35,6 @@ export function Thumbnail({ src, alt = "", className, fallback }: Props) {
     return () => obs.disconnect();
   }, [inView]);
 
-  // Defensive: reset transient state if src changes mid-life.
-  useEffect(() => {
-    setImgReady(false);
-    setErrored(false);
-  }, [src]);
-
   // Callback ref: when the <img> element mounts, check if it's already
   // loaded (cached). If so, short-circuit to ready — onLoad may not fire
   // for cached images in some browsers.
