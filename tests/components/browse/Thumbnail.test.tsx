@@ -119,4 +119,44 @@ describe("Thumbnail", () => {
     expect(screen.queryByTestId("thumb-skeleton")).not.toBeInTheDocument();
     expect(img).toBeInTheDocument();
   });
+
+  it("renders the fallback when the image fires onError", () => {
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        cb: (entries: { isIntersecting: boolean; target: Element }[]) => void;
+        constructor(
+          cb: (entries: { isIntersecting: boolean; target: Element }[]) => void,
+        ) {
+          this.cb = cb;
+        }
+        observe(el: Element) {
+          this.cb([{ isIntersecting: true, target: el }]);
+        }
+        disconnect() {}
+        unobserve() {}
+        takeRecords() {
+          return [];
+        }
+        root = null;
+        rootMargin = "";
+        thresholds: number[] = [];
+      },
+    );
+
+    render(
+      <Thumbnail
+        src="/api/thumb/nas/prints/anchor.stl"
+        className="h-12 w-12 rounded object-contain"
+        fallback={<div data-testid="fallback">FALLBACK</div>}
+      />,
+    );
+
+    const img = screen.getByAltText("");
+    fireEvent.error(img);
+
+    expect(screen.getByTestId("fallback")).toBeInTheDocument();
+    expect(screen.queryByAltText("")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("thumb-skeleton")).not.toBeInTheDocument();
+  });
 });

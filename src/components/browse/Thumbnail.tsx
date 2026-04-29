@@ -9,10 +9,11 @@ type Props = {
   fallback: ReactNode;
 };
 
-export function Thumbnail({ src, alt = "", className, fallback: _fallback }: Props) {
+export function Thumbnail({ src, alt = "", className, fallback }: Props) {
   const skeletonRef = useRef<HTMLDivElement | null>(null);
   const [inView, setInView] = useState(false);
   const [imgReady, setImgReady] = useState(false);
+  const [errored, setErrored] = useState(false);
 
   useEffect(() => {
     if (inView) return;
@@ -34,6 +35,8 @@ export function Thumbnail({ src, alt = "", className, fallback: _fallback }: Pro
     return () => obs.disconnect();
   }, [inView]);
 
+  if (errored) return <>{fallback}</>;
+
   return (
     <div className={`${className ?? ""} relative overflow-hidden`}>
       {inView && (
@@ -43,6 +46,7 @@ export function Thumbnail({ src, alt = "", className, fallback: _fallback }: Pro
           alt={alt}
           className="block h-full w-full object-contain"
           onLoad={() => setImgReady(true)}
+          onError={() => setErrored(true)}
         />
       )}
       {!imgReady && (
