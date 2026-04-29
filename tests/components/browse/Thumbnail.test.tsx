@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import { Thumbnail } from "@/components/browse/Thumbnail";
 
@@ -76,5 +76,47 @@ describe("Thumbnail", () => {
     expect(img.getAttribute("src")).toBe("/api/thumb/nas/prints/anchor.stl");
     // Skeleton still present (image hasn't loaded yet)
     expect(screen.getByTestId("thumb-skeleton")).toBeInTheDocument();
+  });
+
+  it("removes the skeleton when the image fires onLoad", () => {
+    // Firing IO stub
+    vi.stubGlobal(
+      "IntersectionObserver",
+      class {
+        cb: (entries: { isIntersecting: boolean; target: Element }[]) => void;
+        constructor(
+          cb: (entries: { isIntersecting: boolean; target: Element }[]) => void,
+        ) {
+          this.cb = cb;
+        }
+        observe(el: Element) {
+          this.cb([{ isIntersecting: true, target: el }]);
+        }
+        disconnect() {}
+        unobserve() {}
+        takeRecords() {
+          return [];
+        }
+        root = null;
+        rootMargin = "";
+        thresholds: number[] = [];
+      },
+    );
+
+    render(
+      <Thumbnail
+        src="/api/thumb/nas/prints/anchor.stl"
+        className="h-12 w-12 rounded object-contain"
+        fallback={<div>fallback</div>}
+      />,
+    );
+
+    const img = screen.getByAltText("");
+    expect(screen.getByTestId("thumb-skeleton")).toBeInTheDocument();
+
+    fireEvent.load(img);
+
+    expect(screen.queryByTestId("thumb-skeleton")).not.toBeInTheDocument();
+    expect(img).toBeInTheDocument();
   });
 });

@@ -12,6 +12,7 @@ type Props = {
 export function Thumbnail({ src, alt = "", className, fallback: _fallback }: Props) {
   const skeletonRef = useRef<HTMLDivElement | null>(null);
   const [inView, setInView] = useState(false);
+  const [imgReady, setImgReady] = useState(false);
 
   useEffect(() => {
     if (inView) return;
@@ -41,16 +42,19 @@ export function Thumbnail({ src, alt = "", className, fallback: _fallback }: Pro
           src={src}
           alt={alt}
           className="block h-full w-full object-contain"
+          onLoad={() => setImgReady(true)}
         />
       )}
-      <div
-        ref={skeletonRef}
-        data-testid="thumb-skeleton"
-        className="absolute inset-0 rounded bg-neutral-200 dark:bg-neutral-800"
-        aria-hidden="true"
-      >
-        <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent motion-safe:animate-[shimmer_1.4s_infinite] dark:via-white/10" />
-      </div>
+      {!imgReady && (
+        <div
+          ref={skeletonRef}
+          data-testid="thumb-skeleton"
+          className="absolute inset-0 rounded bg-neutral-200 dark:bg-neutral-800"
+          aria-hidden="true"
+        >
+          <div className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/40 to-transparent motion-safe:animate-[shimmer_1.4s_infinite] dark:via-white/10" />
+        </div>
+      )}
     </div>
   );
 }
