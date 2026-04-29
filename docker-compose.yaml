@@ -4,6 +4,19 @@ services:
     restart: unless-stopped
     expose:
       - "3000"
+    # Coolify v4's dockercompose build pack auto-generates traefik routers but
+    # never emits the loadbalancer service-port label, so the proxy returns
+    # 503 unless we add it manually. Coolify substitutes magic SERVICE_* vars
+    # but not COOLIFY_RESOURCE_UUID into label keys, so the auto-router
+    # service name has to be hard-coded here. Update both lines if the
+    # Coolify application is ever recreated (the value is the application
+    # UUID, available via `coolify app list`). For non-Coolify (plain
+    # docker-compose / nginx / caddy / etc.) deployments these labels are
+    # harmless noise — traefik would only honour them when routing through
+    # Coolify's proxy.
+    labels:
+      - "traefik.http.services.http-0-eoqo9ctdghx2bb5bi6zukkvd-minifold.loadbalancer.server.port=3000"
+      - "traefik.http.services.https-0-eoqo9ctdghx2bb5bi6zukkvd-minifold.loadbalancer.server.port=3000"
     environment:
       - SERVICE_FQDN_MINIFOLD_3000
       - DATABASE_PATH=/app/data/minifold.db
