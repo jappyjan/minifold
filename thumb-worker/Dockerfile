@@ -29,6 +29,10 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# Chromium's crashpad helper needs a writable HOME. The 'worker' user is
+# created with --system below, which leaves /home/worker missing — point HOME
+# at /tmp (worker has write access) so puppeteer.launch can boot Chromium.
+ENV HOME=/tmp
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       chromium \
