@@ -16,9 +16,6 @@ const dir = (name: string) => ({
   modifiedAt: new Date(0),
 });
 
-const TRANSPARENT_PIXEL =
-  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-
 // Stub IntersectionObserver so it fires immediately on observe()
 beforeEach(() => {
   vi.stubGlobal(
@@ -133,7 +130,7 @@ describe("EntryCard", () => {
       );
     });
 
-    it("shows transparent placeholder before intersection (non-firing stub)", () => {
+    it("does not mount the <img> before intersection (non-firing stub)", () => {
       // Override with a non-firing stub for this test only
       vi.stubGlobal(
         "IntersectionObserver",
@@ -158,8 +155,9 @@ describe("EntryCard", () => {
           thumbnailsEnabled={true}
         />,
       );
-      const img = screen.getByAltText("");
-      expect(img.getAttribute("src")).toBe(TRANSPARENT_PIXEL);
+      // Pre-intersection: no <img> mounted; only the skeleton is in the DOM.
+      expect(screen.queryByAltText("")).not.toBeInTheDocument();
+      expect(screen.getByTestId("thumb-skeleton")).toBeInTheDocument();
     });
 
     it("does NOT render <img> for a .txt file even when thumbnailsEnabled=true", () => {

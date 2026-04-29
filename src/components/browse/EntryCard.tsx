@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
 import type { Entry } from "@/server/storage/types";
 import { fileKindOf } from "@/server/browse/file-kind";
 import { encodePathSegments } from "@/server/browse/encode-path";
+import { Thumbnail } from "./Thumbnail";
 
 type Props = {
   providerSlug: string;
@@ -15,34 +15,6 @@ type Props = {
 
 function joinPath(parent: string, name: string): string {
   return parent ? `${parent}/${name}` : name;
-}
-
-const TRANSPARENT_PIXEL =
-  "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-
-function useLazyThumb(thumbUrl: string | null) {
-  const ref = useRef<HTMLImageElement | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    if (!thumbUrl || loaded) return;
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            setLoaded(true);
-            obs.disconnect();
-            return;
-          }
-        }
-      },
-      { rootMargin: "100px" },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [thumbUrl, loaded]);
-  return { ref, loaded };
 }
 
 export function EntryCard({
@@ -60,22 +32,16 @@ export function EntryCard({
     ? `/api/thumb/${providerSlug}/${encodePathSegments(childPath)}`
     : null;
 
-  const [errored, setErrored] = useState(false);
-  const { ref, loaded } = useLazyThumb(thumbUrl);
-
   return (
     <Link
       href={href}
       className="group flex aspect-square flex-col items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-white p-3 text-center transition-colors hover:border-neutral-400 hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-950 dark:hover:border-neutral-600 dark:hover:bg-neutral-900"
     >
-      {thumbUrl && !errored ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          ref={ref}
-          src={loaded ? thumbUrl : TRANSPARENT_PIXEL}
-          alt=""
-          className="h-12 w-12 rounded object-contain"
-          onError={() => setErrored(true)}
+      {thumbUrl ? (
+        <Thumbnail
+          src={thumbUrl}
+          className="h-12 w-12 rounded"
+          fallback={<Icon entry={entry} />}
         />
       ) : (
         <Icon entry={entry} />
