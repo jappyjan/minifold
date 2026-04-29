@@ -173,6 +173,11 @@ function getBrowser(): Promise<Browser> {
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--use-gl=swiftshader",
+        // Chromium 119+ disabled SwiftShader as a WebGL fallback for being
+        // an "unsafe software renderer". For headless server-side rendering
+        // we accept that tradeoff — WebGL via SwiftShader is the only way
+        // to get a Three.js scene rendered without a GPU.
+        "--enable-unsafe-swiftshader",
         "--disable-gpu",
       ],
     });
