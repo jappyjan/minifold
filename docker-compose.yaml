@@ -1,6 +1,12 @@
 services:
   minifold:
     image: ghcr.io/jappyjan/minifold:latest
+    # Force a fresh pull on every `compose up`. Coolify defaults Docker
+    # Compose's pull_policy to "missing", so once a `:latest` image is
+    # cached locally, subsequent redeploys will keep using the stale image
+    # even after CI publishes a new manifest. `always` makes Coolify check
+    # the registry digest each redeploy and pull only when it changed.
+    pull_policy: always
     restart: unless-stopped
     expose:
       - "3000"
@@ -38,6 +44,7 @@ services:
 
   minifold-thumbs:
     image: ghcr.io/jappyjan/minifold-thumbs:latest
+    pull_policy: always
     restart: unless-stopped
     healthcheck:
       # /health only handles GET. Use a real GET (drop --spider, which sends HEAD).
