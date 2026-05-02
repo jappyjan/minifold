@@ -2359,33 +2359,34 @@ git commit -m "feat(settings): --accent CSS var + SettingsContext"
 ## Task 13: Root layout — settings, title, accent, must-change-password gate
 
 **Files:**
-- Create: `src/middleware.ts` (sets `x-pathname` header)
+- Modify: `src/proxy.ts` (add `x-pathname` request-header injection on every code path)
 - Modify: `src/app/layout.tsx`
 
-The standard pattern in Next.js for "let the layout know which path is being rendered" is a tiny middleware that copies the request URL's pathname into a custom header. The middleware runs on Edge (no DB access), the layout reads the header server-side. This is the documented workaround.
+**Important Next.js 16 detail:** This project is on Next.js 16, which renamed Middleware → Proxy. The single proxy file lives at `src/proxy.ts` (already in the codebase doing setup-redirect + session-validate). Next.js 16 forbids both `middleware.ts` and `proxy.ts` simultaneously — we must extend the existing `proxy.ts`.
 
-- [ ] **Step 1: Read current layout**
+The pattern: on every code path in `proxy.ts` that returns `NextResponse.next()`, inject the `x-pathname` request header so layouts can read the pathname. For `NextResponse.redirect(...)` paths, no header injection needed (the redirect short-circuits before reaching the layout).
 
-Open `src/app/layout.tsx`. The current implementation is sync, has a static `metadata` export, and renders `<TRPCProvider><AppShell sidebar={<Sidebar />}>{children}</AppShell></TRPCProvider>`.
+- [ ] **Step 1: Read current proxy.ts and layout**
 
-- [ ] **Step 2: Create the middleware**
+Open `src/proxy.ts` to see its current shape (it already has `PUBLIC_PREFIXES`, setup-redirect logic, and session-validate logic). Open `src/app/layout.tsx` (sync, static `metadata`, renders `<TRPCProvider><AppShell sidebar={<Sidebar />}>{children}</AppShell></TRPCProvider>`).
 
-Create `src/middleware.ts`:
+- [ ] **Step 2: Add `x-pathname` header injection to proxy.ts**
+
+In `src/proxy.ts`, refactor so every `NextResponse.next()` carries forwarded headers including `x-pathname`. Do this with a helper at the top of the function:
 
 ```ts
-import { NextResponse, type NextRequest } from "next/server";
-
-export function middleware(req: NextRequest) {
-  const headers = new Headers(req.headers);
-  headers.set("x-pathname", req.nextUrl.pathname);
-  return NextResponse.next({ request: { headers } });
-}
-
-export const config = {
-  // Match all routes except Next.js internals and static assets.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
-};
+// Build the forwarded headers ONCE; reuse for every NextResponse.next() in this proxy.
+const forwardedHeaders = new Headers(req.headers);
+forwardedHeaders.set("x-pathname", pathname);
+const passThrough = () =>
+  NextResponse.next({ request: { headers: forwardedHeaders } });
 ```
+
+Then replace every `return NextResponse.next();` in the file with `return passThrough();`.
+
+`NextResponse.redirect(...)` calls remain unchanged — redirects don't reach the layout, so no header is needed there.
+
+The `PUBLIC_PREFIXES` short-circuit at the top of the function (`/_next`, `/favicon.ico`) should also use `passThrough()` so static asset requests don't break — actually, static prefix requests don't need the pathname header (no layout renders), but harmless to include. Prefer `passThrough()` for consistency.
 
 - [ ] **Step 3: Replace the root layout with the async version**
 
@@ -2464,8 +2465,8 @@ Expected: PASS overall. Some tests that mock `getCurrentUser` or render the layo
 - [ ] **Step 6: Commit**
 
 ```bash
-git add src/middleware.ts src/app/layout.tsx
-git commit -m "feat(shell): root layout reads settings, gates must-change-password via middleware-set x-pathname"
+git add src/proxy.ts src/app/layout.tsx
+git commit -m "feat(shell): root layout reads settings, gates must-change-password via proxy-set x-pathname"
 ```
 
 ---
