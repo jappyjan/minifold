@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -7,7 +7,6 @@ import {
   clearLogo,
   resolveLogoPath,
   sniffImageType,
-  type LogoExt,
 } from "@/server/settings/logo-storage";
 
 let tmp: string;
