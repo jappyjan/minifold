@@ -10,15 +10,21 @@ const PUBLIC_PREFIXES = ["/_next", "/favicon.ico"];
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Build the forwarded headers ONCE; reuse for every NextResponse.next() in this proxy.
+  const forwardedHeaders = new Headers(req.headers);
+  forwardedHeaders.set("x-pathname", pathname);
+  const passThrough = () =>
+    NextResponse.next({ request: { headers: forwardedHeaders } });
+
   if (PUBLIC_PREFIXES.some((p) => pathname.startsWith(p))) {
-    return NextResponse.next();
+    return passThrough();
   }
 
   const db = getDatabase();
   const setupComplete = hasAnyAdmin(db) && hasAnyProvider(db);
 
   if (!setupComplete) {
-    if (pathname === "/setup") return NextResponse.next();
+    if (pathname === "/setup") return passThrough();
     return NextResponse.redirect(new URL("/setup", req.url));
   }
 
@@ -31,7 +37,7 @@ export default async function proxy(req: NextRequest) {
   const session = token ? validateSession(db, token) : null;
 
   if (!session) {
-    if (pathname === "/login") return NextResponse.next();
+    if (pathname === "/login") return passThrough();
     const loginUrl = new URL("/login", req.url);
     if (pathname !== "/") loginUrl.searchParams.set("callbackUrl", pathname);
     const res = NextResponse.redirect(loginUrl);
@@ -44,7 +50,7 @@ export default async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL("/", req.url));
   }
 
-  return NextResponse.next();
+  return passThrough();
 }
 
 export const config = {
