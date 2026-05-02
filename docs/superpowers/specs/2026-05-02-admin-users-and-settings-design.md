@@ -250,7 +250,7 @@ Server action `clearLogo`:
   - Save button is **disabled** until both backgrounds pass
 - Save action `saveAccentColor`:
   - Server-side re-runs the same `validateAccent` (don't trust client)
-  - Rejects if either ratio < 4.5:1 (AA for normal text)
+  - Rejects if either ratio < 3:1 (WCAG 1.4.11 Non-text Contrast — see §6)
   - `setSetting(db, 'accent_color', value)`
   - `revalidatePath('/', 'layout')`
 
@@ -271,29 +271,35 @@ Pure functions, no I/O:
 ```ts
 const LIGHT_BG = '#ffffff'
 const DARK_BG  = '#0a0a0a'
+const THRESHOLD = 3.0   // WCAG 1.4.11 (Non-text Contrast / AA Large)
 
 wcagContrast(foreground: string, background: string): number
   // Standard WCAG 2.1 ratio formula via relative luminance.
-  // Returns e.g. 4.51 for AA-passing or 2.13 for failing.
 
 validateAccent(color: string): {
-  light: { ratio: number; passes: boolean }
+  light: { ratio: number; passes: boolean }   // passes if ratio ≥ 3.0
   dark:  { ratio: number; passes: boolean }
   passes: boolean  // both passes
 }
 
 nearestAccessible(color: string): string
-  // Walks the colour in OKLCH lightness toward whichever direction
-  // (lighter or darker) reaches AA on both backgrounds first.
-  // If already passing, returns input unchanged.
+  // Walks the colour in OKLCH lightness in both directions; returns
+  // the closest passing candidate by OKLCH Euclidean distance.
+  // Falls back to the seeded default if no value passes both bgs.
 ```
+
+### Threshold rationale: 3:1, not 4.5:1
+
+The accent colour is used for **UI components** (buttons, focus rings, active-state highlights, icons, dividers) — for which [WCAG 1.4.11 Non-text Contrast](https://www.w3.org/WAI/WCAG21/Understanding/non-text-contrast.html) requires 3:1 against the background. The 4.5:1 ratio (WCAG 1.4.3 Contrast Minimum) applies to *normal text*, but accent-coloured text is rare and typically large/bold (links, headings) — which qualifies for the 3:1 "AA Large" threshold either way.
+
+A 4.5:1 ratio against both `#ffffff` AND `#0a0a0a` is **mathematically unsatisfiable** — the required foreground luminance windows do not overlap (need ≤ 0.1833 for white, ≥ 0.1887 for `#0a0a0a`). At 3:1 the window is comfortable (~0.109 to ~0.300), and real palette colours like `#3b82f6` fit naturally.
 
 **Implementation:** uses `chroma-js` (~16 KB minified, MIT-licensed, mature) for hex ⇄ OKLCH conversion.
 
 **Walking algorithm:**
 1. Search both directions in OKLCH lightness: step by ±0.02 from the original up to L=0 and L=1, recording any colours that pass `validateAccent` on both backgrounds.
 2. Among the passing candidates, return the one closest to the original colour by Euclidean distance in OKLCH.
-3. If no candidate within the full lightness range passes (mid-saturation greys can fail both backgrounds simultaneously), fall back to the seeded default `#3b82f6`. The UI surfaces this as the suggested colour, same as any other suggestion.
+3. If no candidate within the full lightness range passes (true mid-greys with zero chroma can still miss the window), fall back to the seeded default `#3b82f6`. The UI surfaces this as the suggested colour, same as any other suggestion.
 
 The `LIGHT_BG`/`DARK_BG` constants are exported so client components can import them for live preview without re-deriving them.
 

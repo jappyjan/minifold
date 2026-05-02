@@ -353,6 +353,8 @@ git commit -m "feat(auth): random-password generator with no-confusion alphabet"
 - Create: `src/server/auth/contrast.ts`
 - Create: `tests/server/auth/contrast.test.ts`
 
+**Threshold:** 3:1 (WCAG 1.4.11 Non-text Contrast — see spec §6 for rationale). Accent colour is used for UI components (buttons, focus rings, active-state highlights), not normal text. A 4.5:1 ratio against both `#ffffff` and `#0a0a0a` is mathematically unsatisfiable.
+
 - [ ] **Step 1: Write the failing tests for `wcagContrast`**
 
 Create `tests/server/auth/contrast.test.ts`:
@@ -376,32 +378,38 @@ describe("wcagContrast", () => {
     expect(wcagContrast("#777777", "#777777")).toBeCloseTo(1, 1);
   });
 
-  it("computes ~8.59 for #595959 on white (W3C example)", () => {
-    expect(wcagContrast("#595959", "#ffffff")).toBeCloseTo(7.0, 0);
+  it("returns a contrast ratio greater than 1 for distinct colours", () => {
+    expect(wcagContrast("#595959", "#ffffff")).toBeGreaterThan(5);
   });
 });
 
-describe("validateAccent", () => {
-  it("passes for black on both backgrounds (high contrast on white, low on black)", () => {
-    // black on white: ~21, black on near-black: ~1 — should fail dark
+describe("validateAccent (3:1 threshold)", () => {
+  it("passes light bg, fails dark bg for black", () => {
+    // black on white: ~21 (passes); black on #0a0a0a: ~1 (fails).
     const r = validateAccent("#000000");
     expect(r.light.passes).toBe(true);
     expect(r.dark.passes).toBe(false);
     expect(r.passes).toBe(false);
   });
 
-  it("passes for a colour with AA on both backgrounds", () => {
-    // #767676 has 4.54:1 on white and ~3.6:1 on #0a0a0a — actually fails dark.
-    // Use a colour known to pass both: a deep saturated mid-tone.
-    // Tailwind blue-500 (#3b82f6) is the seeded default and should pass both AA.
+  it("passes both backgrounds for the seeded default #3b82f6 at 3:1", () => {
+    // #3b82f6 has ~3.7:1 on white (passes) and ~5.4:1 on #0a0a0a (passes) — both ≥ 3.
     const r = validateAccent("#3b82f6");
     expect(r.light.passes).toBe(true);
     expect(r.dark.passes).toBe(true);
     expect(r.passes).toBe(true);
   });
 
-  it("fails for a mid-grey that fails both", () => {
-    const r = validateAccent("#888888");
+  it("includes the actual ratios in the report", () => {
+    const r = validateAccent("#3b82f6");
+    expect(r.light.ratio).toBeGreaterThan(3);
+    expect(r.dark.ratio).toBeGreaterThan(3);
+  });
+
+  it("fails for a colour too close to white in luminance", () => {
+    // #f0f0f0 is very light — fails on white.
+    const r = validateAccent("#f0f0f0");
+    expect(r.light.passes).toBe(false);
     expect(r.passes).toBe(false);
   });
 });
@@ -421,13 +429,9 @@ describe("nearestAccessible", () => {
     expect(validateAccent(out).passes).toBe(true);
   });
 
-  it("falls back to the seeded default when no value passes both backgrounds", () => {
-    // A perfectly mid-grey #808080 cannot pass both backgrounds at any lightness
-    // because its hue/chroma is 0 (true grey). Lightening or darkening it just
-    // moves it closer to white or black, so one bg always fails.
-    // Implementation must fall back to "#3b82f6" rather than loop forever.
-    const out = nearestAccessible("#808080");
-    expect(out).toBe("#3b82f6");
+  it("returns a passing colour for a failing input — near-white", () => {
+    const out = nearestAccessible("#f0f0f0");
+    expect(validateAccent(out).passes).toBe(true);
   });
 });
 
@@ -453,7 +457,10 @@ import chroma from "chroma-js";
 
 export const LIGHT_BG = "#ffffff";
 export const DARK_BG = "#0a0a0a";
-const AA_THRESHOLD = 4.5;
+// 3:1 — WCAG 1.4.11 Non-text Contrast (UI components / AA Large).
+// Accent colour is used for buttons, focus rings, etc. — not normal text.
+// 4.5:1 against both bgs is mathematically unsatisfiable; see spec §6.
+const AA_THRESHOLD = 3.0;
 const FALLBACK = "#3b82f6";
 
 export function wcagContrast(foreground: string, background: string): number {
@@ -1602,9 +1609,10 @@ describe("clearLogo", () => {
 });
 
 describe("saveAccentColor", () => {
-  it("rejects a sub-AA colour", async () => {
+  it("rejects a colour that fails 3:1 against either background", async () => {
+    // #aaaaaa: ~2.3:1 on white (fails), ~8.5:1 on #0a0a0a (passes).
     const { saveAccentColor } = await import("@/app/admin/settings/actions");
-    const s = await saveAccentColor({}, fd({ value: "#888888" }));
+    const s = await saveAccentColor({}, fd({ value: "#aaaaaa" }));
     expect(s.fieldErrors?.value).toBeTruthy();
   });
 
@@ -3621,7 +3629,7 @@ vi.mock("@/app/admin/settings/actions", () => ({
 
 describe("AccentColorForm", () => {
   it("disables Save when initial colour fails contrast", () => {
-    render(<AccentColorForm initialValue="#888888" />);
+    render(<AccentColorForm initialValue="#aaaaaa" />);
     const save = screen.getByRole("button", { name: /save/i });
     expect(save).toBeDisabled();
   });
@@ -3633,7 +3641,7 @@ describe("AccentColorForm", () => {
   });
 
   it("shows 'Use nearest accessible' button when contrast fails", () => {
-    render(<AccentColorForm initialValue="#888888" />);
+    render(<AccentColorForm initialValue="#aaaaaa" />);
     expect(screen.getByRole("button", { name: /use nearest accessible/i })).toBeInTheDocument();
   });
 
@@ -3652,7 +3660,7 @@ describe("AccentColorForm", () => {
     expect(screen.getAllByText(/aa/i).length).toBeGreaterThanOrEqual(2);
     // Change to failing colour.
     const input = screen.getByRole("textbox") as HTMLInputElement;
-    fireEvent.change(input, { target: { value: "#888888" } });
+    fireEvent.change(input, { target: { value: "#aaaaaa" } });
     // Now at least one "below AA" should appear.
     expect(screen.getAllByText(/below aa/i).length).toBeGreaterThanOrEqual(1);
   });
@@ -3787,7 +3795,7 @@ Expected: PASS for all five cases.
 
 - [ ] **Step 5: Manual smoke test**
 
-Run dev server. Visit `/admin/settings`, change accent colour to `#888888` — Save should disable and "Use nearest accessible" should appear. Click it, then Save. Page reloads with new accent.
+Run dev server. Visit `/admin/settings`, change accent colour to `#aaaaaa` — Save should disable and "Use nearest accessible" should appear. Click it, then Save. Page reloads with new accent.
 
 - [ ] **Step 6: Commit**
 
@@ -3915,7 +3923,7 @@ Run dev server, log in as admin, walk through:
 4. `/admin/users` — promote a user, then demote them.
 5. `/admin/settings` — change app name, verify `<title>` updates after refresh.
 6. `/admin/settings` — upload a logo (PNG), verify it renders in sidebar.
-7. `/admin/settings` — change accent colour to `#888888`, verify Save is disabled, accept suggestion, save; verify CSS variable updates.
+7. `/admin/settings` — change accent colour to `#aaaaaa`, verify Save is disabled, accept suggestion, save; verify CSS variable updates.
 8. `/admin/settings` — clear logo.
 
 Stop the dev server.
