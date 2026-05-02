@@ -1,9 +1,10 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createDatabase } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
+import { getSetting, setSetting } from "@/server/db/settings";
 
 function setup() {
   const tmp = mkdtempSync(join(tmpdir(), "minifold-mig-"));
@@ -106,5 +107,28 @@ describe("runMigrations", () => {
       .prepare("SELECT name FROM schema_migrations WHERE name='001_bad.sql'")
       .get();
     expect(applied).toBeUndefined();
+  });
+
+  it("006 seeds phase 8 settings (app_name, logo_url, accent_color)", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "minifold-mig-006-"));
+    const db = createDatabase(join(tmp, "test.db"));
+    runMigrations(db, resolve(process.cwd(), "src/server/db/migrations"));
+    expect(getSetting(db, "app_name")).toBe("Minifold");
+    expect(getSetting(db, "logo_url")).toBe("");
+    expect(getSetting(db, "accent_color")).toBe("#3b82f6");
+    db.close();
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("006 is idempotent (re-running migrations does not overwrite changed values)", () => {
+    const tmp = mkdtempSync(join(tmpdir(), "minifold-mig-006b-"));
+    const db = createDatabase(join(tmp, "test.db"));
+    runMigrations(db, resolve(process.cwd(), "src/server/db/migrations"));
+    // Operator has changed the app name; re-running migrations should not revert it.
+    setSetting(db, "app_name", "MyFiles");
+    runMigrations(db, resolve(process.cwd(), "src/server/db/migrations"));
+    expect(getSetting(db, "app_name")).toBe("MyFiles");
+    db.close();
+    rmSync(tmp, { recursive: true, force: true });
   });
 });
