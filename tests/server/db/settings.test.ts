@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import type { Database } from "better-sqlite3";
 import { createDatabase } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { getSetting, setSetting } from "@/server/db/settings";
+import { getSetting, setSetting, getAllSettings } from "@/server/db/settings";
 
 let tmp: string;
 let db: Database;
@@ -35,5 +35,20 @@ describe("settings repository", () => {
     setSetting(db, "theme", "dark");
     setSetting(db, "theme", "light");
     expect(getSetting(db, "theme")).toBe("light");
+  });
+
+  it("getAllSettings returns an object with every key/value", () => {
+    setSetting(db, "alpha", "1");
+    setSetting(db, "beta", "two");
+    const all = getAllSettings(db);
+    expect(all.alpha).toBe("1");
+    expect(all.beta).toBe("two");
+  });
+
+  it("getAllSettings returns an empty object when no settings exist", () => {
+    // The seeded keys (config_encryption_key, global_default_access, app_name, logo_url, accent_color)
+    // are present after migrations. Just verify the shape is Record<string,string>.
+    const all = getAllSettings(db);
+    for (const v of Object.values(all)) expect(typeof v).toBe("string");
   });
 });

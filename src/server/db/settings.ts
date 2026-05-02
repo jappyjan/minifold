@@ -13,3 +13,12 @@ export function setSetting(db: Database, key: string, value: string): void {
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
   ).run(key, value);
 }
+
+export function getAllSettings(db: Database): Record<string, string> {
+  const rows = db
+    .prepare("SELECT key, value FROM settings")
+    .all() as { key: string; value: string }[];
+  const out: Record<string, string> = {};
+  for (const row of rows) out[row.key] = row.value;
+  return out;
+}
