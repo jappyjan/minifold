@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import type { Database } from "better-sqlite3";
 import { createDatabase } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
-import { createUser, findUserById, findUserByUsername } from "@/server/db/users";
+import { createUser, findUserById } from "@/server/db/users";
 import { hashPassword, verifyPassword } from "@/server/auth/password";
 import { createSession } from "@/server/auth/session";
 import {
