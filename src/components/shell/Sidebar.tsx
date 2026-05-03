@@ -4,14 +4,14 @@ import { SignOutButton } from "@/components/auth/SignOutButton";
 import { getDatabase } from "@/server/db";
 import { listProviders } from "@/server/db/providers";
 
-export async function Sidebar() {
+export async function Sidebar({ appName }: { appName: string }) {
   const user = await getCurrentUser();
   const providers = user ? listProviders(getDatabase()) : [];
 
   return (
     <aside className="flex h-full w-64 flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-950">
       <div className="flex h-14 items-center px-4 text-lg font-semibold">
-        Minifold
+        {appName}
       </div>
       <nav className="flex-1 overflow-y-auto px-2 py-2">
         {providers.length > 0 && (
@@ -49,6 +49,16 @@ export async function Sidebar() {
           </Link>
           {user && <SignOutButton />}
         </div>
+        {user && (
+          <div className="border-t border-neutral-200 dark:border-neutral-800">
+            <Link
+              href="/change-password"
+              className="block py-1 text-sm text-neutral-600 hover:text-neutral-900 dark:text-neutral-300 dark:hover:text-neutral-100"
+            >
+              Change password
+            </Link>
+          </div>
+        )}
       </div>
     </aside>
   );

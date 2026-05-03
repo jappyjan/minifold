@@ -12,13 +12,13 @@ vi.mock("@/server/db/providers", () => ({ listProviders: vi.fn(() => []) }));
 
 describe("Sidebar", () => {
   it("renders the app name", async () => {
-    const node = await Sidebar();
+    const node = await Sidebar({ appName: "Minifold" });
     render(node);
     expect(screen.getByText("Minifold")).toBeInTheDocument();
   });
 
   it("has an admin link", async () => {
-    const node = await Sidebar();
+    const node = await Sidebar({ appName: "Minifold" });
     render(node);
     expect(screen.getByRole("link", { name: /admin/i })).toBeInTheDocument();
   });
@@ -36,7 +36,7 @@ describe("Sidebar", () => {
       created_at: Date.now(),
       last_login: null,
     });
-    const node = await Sidebar();
+    const node = await Sidebar({ appName: "Minifold" });
     render(node);
     expect(screen.getByText(/signed in as/i)).toBeInTheDocument();
     expect(screen.getByText("Jane")).toBeInTheDocument();
@@ -67,8 +67,26 @@ describe("Sidebar", () => {
         created_at: Date.now(),
       },
     ]);
-    const node = await Sidebar();
+    const node = await Sidebar({ appName: "Minifold" });
     render(node);
     expect(screen.getByRole("link", { name: /nas files/i })).toBeInTheDocument();
+  });
+
+  it("shows 'Change password' link when a session exists", async () => {
+    const { getCurrentUser } = await import("@/server/auth/current-user");
+    vi.mocked(getCurrentUser).mockResolvedValueOnce({
+      id: "u1",
+      name: "Jane",
+      username: "jane",
+      password: "$hash",
+      role: "admin",
+      must_change_password: 0,
+      deactivated: 0,
+      created_at: Date.now(),
+      last_login: null,
+    });
+    const node = await Sidebar({ appName: "Minifold" });
+    render(node);
+    expect(screen.getByRole("link", { name: /change password/i })).toBeInTheDocument();
   });
 });
