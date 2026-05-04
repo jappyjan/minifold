@@ -12,6 +12,7 @@ import {
   writeLogo,
   clearLogo as clearLogoFile,
   regenerateMaskable,
+  LOGO_EXTS,
 } from "@/server/settings/logo-storage";
 
 const MAX_LOGO_BYTES = 256 * 1024;
@@ -144,19 +145,23 @@ export async function saveAccentColor(
       },
     };
   }
-  setSetting(getDatabase(), "accent_color", parsed.data.value);
-  // If a logo is currently uploaded, regenerate the maskable variant against the new accent.
+  // Render the new maskable variant BEFORE persisting the accent setting,
+  // so a render failure never leaves the DB ahead of the on-disk artifacts.
   const dir = dataDir();
   let logoFile: string | null = null;
-  for (const e of ["png", "webp", "svg"] as const) {
+  for (const e of LOGO_EXTS) {
     const p = join(dir, `logo.${e}`);
-    if (existsSync(p)) { logoFile = p; break; }
+    if (existsSync(p)) {
+      logoFile = p;
+      break;
+    }
   }
   if (logoFile) {
     const buf = await readFile(logoFile);
     await regenerateMaskable(dir, buf, parsed.data.value);
-    revalidatePath("/api/icon/512/maskable.png");
   }
+  setSetting(getDatabase(), "accent_color", parsed.data.value);
+  if (logoFile) revalidatePath("/api/icon/512/maskable.png");
   revalidatePath("/manifest.webmanifest");
   revalidatePath("/", "layout");
   return { success: true };
