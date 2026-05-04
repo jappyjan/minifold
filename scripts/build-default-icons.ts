@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { resizeAny, composeMaskable } from "../src/server/settings/icon-rendering";
 
@@ -7,6 +7,7 @@ export async function buildDefaultIcons(
   outDir: string,
   accentHex: string,
 ): Promise<void> {
+  await mkdir(outDir, { recursive: true });
   const src = await readFile(sourcePath);
   const [v180, v192, v512, mask] = await Promise.all([
     resizeAny(src, 180),

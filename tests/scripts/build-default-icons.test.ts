@@ -25,8 +25,7 @@ describe("buildDefaultIcons", () => {
   it("writes icon-180.png, icon-192.png, icon-512.png, icon-maskable-512.png to outDir", async () => {
     const src = join(tmp, "icon-source.png");
     writeFileSync(src, await realSourcePng());
-    const outDir = join(tmp, "out");
-    require("node:fs").mkdirSync(outDir, { recursive: true });
+    const outDir = join(tmp, "out"); // does NOT exist — script must create it.
     await buildDefaultIcons(src, outDir, "#3b82f6");
     expect(existsSync(join(outDir, "icon-180.png"))).toBe(true);
     expect(existsSync(join(outDir, "icon-192.png"))).toBe(true);
