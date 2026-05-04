@@ -82,7 +82,7 @@ describe("/api/icon/[size]/[purpose] route", () => {
     expect(res.status).toBe(404);
   });
 
-  it("returns 304 when If-None-Match matches the ETag", async () => {
+  it("returns 304 (with ETag header) when If-None-Match matches", async () => {
     writeFileSync(join(dataDir, "logo-192.png"), await fakePng(192));
     const { GET } = await import("@/app/api/icon/[size]/[purpose]/route");
     const first = await GET(req("/api/icon/192/any.png"), {
@@ -95,5 +95,26 @@ describe("/api/icon/[size]/[purpose] route", () => {
       { params: Promise.resolve({ size: "192", purpose: "any" }) },
     );
     expect(second.status).toBe(304);
+    expect(second.headers.get("ETag")).toBe(etag);
+  });
+
+  it("strips trailing .png from the purpose segment (Next route may pass it through)", async () => {
+    writeFileSync(join(dataDir, "logo-192.png"), await fakePng(192));
+    const { GET } = await import("@/app/api/icon/[size]/[purpose]/route");
+    const res = await GET(req("/api/icon/192/any.png"), {
+      params: Promise.resolve({ size: "192", purpose: "any.png" }),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/png");
+  });
+
+  it("serves the maskable variant from /data when present (size=512, purpose=maskable)", async () => {
+    writeFileSync(join(dataDir, "logo-maskable-512.png"), await fakePng(512));
+    const { GET } = await import("@/app/api/icon/[size]/[purpose]/route");
+    const res = await GET(req("/api/icon/512/maskable.png"), {
+      params: Promise.resolve({ size: "512", purpose: "maskable" }),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe("image/png");
   });
 });
