@@ -17,6 +17,7 @@ export default function manifest(): MetadataRoute.Manifest {
 
   return {
     name: appName,
+    // 12 chars roughly matches Android home-screen label truncation; longer names get cut anyway.
     short_name: appName.length > 12 ? appName.slice(0, 12) : appName,
     description: "Self-hosted file browser",
     start_url: "/",
