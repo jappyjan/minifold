@@ -71,6 +71,14 @@ export function PWAClient() {
             window.__minifoldInstallEvent as unknown as PWAInstallElement["externalPromptEvent"];
         }
       }}
+      // Without these attributes the library's dialog falls back to generic
+      // placeholders ("PWA", "Progressive web application", literal "icon"
+      // text). manifest-url lets the library read the live name (which
+      // reflects the operator's app_name setting); icon points at the
+      // dispatch route so the operator's uploaded logo is shown.
+      manifest-url="/manifest.webmanifest"
+      icon="/api/icon/512/any.png"
+      description="Self-hosted file browser"
     />
   );
 }
