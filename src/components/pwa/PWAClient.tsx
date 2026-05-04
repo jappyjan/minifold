@@ -1,12 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { PWAInstallElement } from "@khmyznikov/pwa-install";
-
-const DISMISSED_KEY = "minifold:pwa-dismissed";
-const PROMPT_DELAY_MS = 30_000;
 
 declare global {
   interface Window {
@@ -14,23 +10,26 @@ declare global {
   }
 }
 
-function shouldShowPrompt(pathname: string | null): boolean {
+// Routes where we never want to render the install prompt:
+// - /login, /setup, /change-password are pre-auth or forced-state pages
+//   where prompting an install is noise.
+// All other behaviour (when to actually show the dialog, dismissal state,
+// already-installed detection, iOS-specific share-button instructions vs
+// Chromium beforeinstallprompt, etc.) is delegated to @khmyznikov/pwa-install.
+function shouldRender(pathname: string | null): boolean {
   if (!pathname) return false;
   if (pathname.startsWith("/login")) return false;
   if (pathname.startsWith("/setup")) return false;
   if (pathname === "/change-password") return false;
-  if (typeof window === "undefined") return false;
-  if (window.matchMedia("(display-mode: standalone)").matches) return false;
-  if (window.localStorage.getItem(DISMISSED_KEY)) return false;
   return true;
 }
 
 export function PWAClient() {
   const pathname = usePathname();
-  const [showPrompt, setShowPrompt] = useState(false);
-  const elementRef = useRef<PWAInstallElement | null>(null);
+  const [libLoaded, setLibLoaded] = useState(false);
 
-  // Service worker registration (production only).
+  // Service worker registration (production only — prebuild-built sw.js
+  // doesn't exist in dev).
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
     if (!("serviceWorker" in navigator)) return;
@@ -43,49 +42,35 @@ export function PWAClient() {
     return () => window.removeEventListener("load", onLoad);
   }, []);
 
-  // 30-second install-prompt timer.
+  // Lazy-load the web component module the first time we render on an
+  // allowed route. Once loaded, the library auto-mounts itself, listens for
+  // beforeinstallprompt, tracks dismissal in localStorage, and decides per
+  // platform whether/when to show its UI.
   useEffect(() => {
-    if (!shouldShowPrompt(pathname)) return;
-    const id = window.setTimeout(() => flushSync(() => setShowPrompt(true)), PROMPT_DELAY_MS);
-    return () => window.clearTimeout(id);
-  }, [pathname]);
-
-  // Lazy-load the web component module + wire externalPromptEvent + showDialog.
-  useEffect(() => {
-    if (!showPrompt) return;
+    if (libLoaded) return;
+    if (!shouldRender(pathname)) return;
     let cancelled = false;
     void import("@khmyznikov/pwa-install").then(() => {
-      if (cancelled) return;
-      const el = elementRef.current;
-      if (!el) return;
-      // Hand the captured beforeinstallprompt event to the component (Chromium path).
-      // The library reads this via the `externalPromptEvent` JS property.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      el.externalPromptEvent = (window.__minifoldInstallEvent ?? null) as any;
-      const onChoice = () => {
-        try {
-          window.localStorage.setItem(DISMISSED_KEY, "1");
-        } catch {
-          // ignore — quota or private mode
-        }
-      };
-      el.addEventListener("pwa-install-success-event", onChoice);
-      el.addEventListener("pwa-install-user-choice-result-event", onChoice);
-      el.addEventListener("pwa-install-fail-event", onChoice);
-      el.showDialog?.(true);
+      if (!cancelled) setLibLoaded(true);
     });
     return () => {
       cancelled = true;
     };
-  }, [showPrompt]);
+  }, [pathname, libLoaded]);
 
-  if (!showPrompt) return null;
+  if (!shouldRender(pathname) || !libLoaded) return null;
   return (
     <pwa-install
-      ref={elementRef}
-      manual-chrome="true"
-      manual-apple="true"
-      disable-screenshots="true"
+      ref={(el: PWAInstallElement | null) => {
+        if (!el) return;
+        // Hand the early-captured beforeinstallprompt event to the component
+        // (Chromium path). The inline script in app/layout.tsx stashes the
+        // event before React hydrates so it isn't lost.
+        if (window.__minifoldInstallEvent) {
+          el.externalPromptEvent =
+            window.__minifoldInstallEvent as unknown as PWAInstallElement["externalPromptEvent"];
+        }
+      }}
     />
   );
 }
