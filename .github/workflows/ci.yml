@@ -34,6 +34,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Generate default PWA icons (prebuild)
+        # tests/app/api/icon/route.test.ts asserts the public/icons/* fallback —
+        # those files are built by the `prebuild` script at `pnpm build` time,
+        # but tests run before build. Generate them explicitly here.
+        run: pnpm prebuild
+
       - name: Test
         run: pnpm test
 
