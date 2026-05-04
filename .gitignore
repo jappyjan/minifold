@@ -48,3 +48,11 @@ next-env.d.ts
 
 # superpowers harness state (brainstorm notes, server logs)
 .superpowers
+
+# PWA icon variants are regenerated from public/icons/icon-source.png at prebuild time
+/public/icons/icon-180.png
+/public/icons/icon-192.png
+/public/icons/icon-512.png
+/public/icons/icon-maskable-512.png
+# Service worker is generated at postbuild time (Task 10)
+/public/sw.js

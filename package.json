@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
+    "prebuild": "tsx scripts/build-default-icons.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
