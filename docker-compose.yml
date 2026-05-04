@@ -1,0 +1,46 @@
+# Generic Minifold deployment. Use this if you run your own reverse proxy
+# (Caddy, nginx, Tailscale Funnel, etc.) and bind directly to port 3000.
+#
+# For Coolify, use docker-compose.coolify.yml.
+# For Traefik, use docker-compose.traefik.yml.
+# For Render or Unraid, see render.yaml / unraid-template.xml.
+#
+# To disable the optional thumbnail worker (saves ~Puppeteer/Three.js memory),
+# comment out the entire minifold-thumbs service AND the
+# MINIFOLD_THUMB_SERVICE_URL env var on the main service. The interactive
+# 3D viewer still works; the grid falls back to type icons.
+
+services:
+  minifold:
+    image: ghcr.io/jappyjan/minifold:latest
+    pull_policy: always
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_PATH: /app/data/minifold.db
+      MINIFOLD_THUMB_SERVICE_URL: http://minifold-thumbs:3001
+    volumes:
+      - minifold-data:/app/data
+      - minifold-files:/files
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  minifold-thumbs:
+    image: ghcr.io/jappyjan/minifold-thumbs:latest
+    pull_policy: always
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  minifold-data:
+  minifold-files:
