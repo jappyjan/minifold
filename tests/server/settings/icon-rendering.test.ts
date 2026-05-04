@@ -61,8 +61,9 @@ describe("composeMaskable", () => {
     expect(px(511, 511)).toEqual(expected);
   });
 
-  it("accepts hex without the # prefix and CSS named colours via sharp", async () => {
-    // sharp itself accepts "#rrggbb", "rrggbb", and CSS names — we just hand it through.
+  it("paints the backdrop with arbitrary #rrggbb hex strings", async () => {
+    // Callers normalise to "#rrggbb" form before calling — sharp itself rejects bare hex
+    // like "3b82f6". This test pins the primitive's contract: we accept hex *with* the #.
     const out = await composeMaskable(sourcePng, "#000000");
     const { data } = await sharp(out).raw().toBuffer({ resolveWithObject: true });
     expect([data[0], data[1], data[2]]).toEqual([0, 0, 0]);
