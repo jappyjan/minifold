@@ -75,6 +75,17 @@ describe("writeLogo", () => {
     await expect(writeLogo(tmp, Buffer.from("not an image"), "#3b82f6")).rejects.toThrow(/unsupported/i);
   });
 
+  it("rejects PNG-sniffable but undecodable content (truncated PNG)", async () => {
+    // 8-byte PNG signature + 4 zero bytes — passes sniffImageType, fails sharp decode.
+    const truncated = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      Buffer.from([0, 0, 0, 0]),
+    ]);
+    await expect(writeLogo(tmp, truncated, "#3b82f6")).rejects.toThrow();
+    // Failed decode must NOT have written the original to disk.
+    expect(existsSync(join(tmp, "logo.png"))).toBe(false);
+  });
+
   it("removes any sibling logo with a different extension", async () => {
     writeFileSync(join(tmp, "logo.svg"), "<svg></svg>");
     const buf = await realPng();

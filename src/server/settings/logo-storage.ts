@@ -43,31 +43,17 @@ export function sniffImageType(buf: Buffer): LogoExt | null {
 
 async function atomicWrite(path: string, buf: Buffer): Promise<void> {
   const tmp = `${path}.tmp`;
-  await writeFile(tmp, buf);
-  await rename(tmp, path);
+  try {
+    await writeFile(tmp, buf);
+    await rename(tmp, path);
+  } catch (err) {
+    await unlink(tmp).catch(() => undefined);
+    throw err;
+  }
 }
 
 // SVG decoding through sharp uses librsvg with limits; if the SVG can't be rasterised,
 // this will throw. Operators uploading exotic SVGs should re-export to PNG.
-async function writeVariants(
-  dir: string,
-  buf: Buffer,
-  accentHex: string,
-): Promise<void> {
-  const [v180, v192, v512, mask] = await Promise.all([
-    resizeAny(buf, 180),
-    resizeAny(buf, 192),
-    resizeAny(buf, 512),
-    composeMaskable(buf, accentHex),
-  ]);
-  await Promise.all([
-    atomicWrite(join(dir, "logo-180.png"), v180),
-    atomicWrite(join(dir, "logo-192.png"), v192),
-    atomicWrite(join(dir, "logo-512.png"), v512),
-    atomicWrite(join(dir, "logo-maskable-512.png"), mask),
-  ]);
-}
-
 export async function writeLogo(
   dir: string,
   buf: Buffer,
@@ -75,14 +61,30 @@ export async function writeLogo(
 ): Promise<LogoExt> {
   const ext = sniffImageType(buf);
   if (!ext) throw new Error("Unsupported image type (must be PNG, SVG, or WebP)");
-  // Remove any sibling logo with a different extension first.
+  // Generate all variant buffers FIRST — if sharp can't decode (corrupt/truncated
+  // input that still passed magic-byte sniffing), this throws before we touch disk.
+  const [v180, v192, v512, mask] = await Promise.all([
+    resizeAny(buf, 180),
+    resizeAny(buf, 192),
+    resizeAny(buf, 512),
+    composeMaskable(buf, accentHex),
+  ]);
+  // Remove any sibling logo with a different extension.
   for (const e of LOGO_EXTS) {
     if (e === ext) continue;
     const p = join(dir, `logo.${e}`);
     if (existsSync(p)) await unlink(p);
   }
-  await writeFile(join(dir, `logo.${ext}`), buf);
-  await writeVariants(dir, buf, accentHex);
+  // Atomic writes — best effort. If one of the five renames fails after others
+  // succeeded, on-disk state is partially-updated; subsequent reads fall back to
+  // the public defaults for missing variants.
+  await Promise.all([
+    atomicWrite(join(dir, `logo.${ext}`), buf),
+    atomicWrite(join(dir, "logo-180.png"), v180),
+    atomicWrite(join(dir, "logo-192.png"), v192),
+    atomicWrite(join(dir, "logo-512.png"), v512),
+    atomicWrite(join(dir, "logo-maskable-512.png"), mask),
+  ]);
   return ext;
 }
 
