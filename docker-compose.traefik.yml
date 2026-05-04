@@ -1,0 +1,57 @@
+# Generic Traefik deployment. Use this if you run Traefik yourself
+# (i.e. NOT through Coolify — for that, use docker-compose.coolify.yml).
+#
+# Prerequisites:
+# - A running Traefik instance with an external Docker network named `traefik`.
+# - A `letsencrypt` certresolver configured in your Traefik static config.
+# - DNS pointing your domain at the Traefik host.
+#
+# Set MINIFOLD_DOMAIN in a sibling `.env` file:
+#     MINIFOLD_DOMAIN=files.example.com
+#
+# Disable thumbs by commenting out minifold-thumbs and the env var (same as
+# docker-compose.yml).
+
+services:
+  minifold:
+    image: ghcr.io/jappyjan/minifold:latest
+    pull_policy: always
+    restart: unless-stopped
+    networks: [traefik, default]
+    environment:
+      DATABASE_PATH: /app/data/minifold.db
+      MINIFOLD_THUMB_SERVICE_URL: http://minifold-thumbs:3001
+    volumes:
+      - minifold-data:/app/data
+      - minifold-files:/files
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.minifold.rule: "Host(`${MINIFOLD_DOMAIN}`)"
+      traefik.http.routers.minifold.entrypoints: "websecure"
+      traefik.http.routers.minifold.tls.certresolver: "letsencrypt"
+      traefik.http.services.minifold.loadbalancer.server.port: "3000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  minifold-thumbs:
+    image: ghcr.io/jappyjan/minifold-thumbs:latest
+    pull_policy: always
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  traefik:
+    external: true
+
+volumes:
+  minifold-data:
+  minifold-files:
