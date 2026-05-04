@@ -42,6 +42,7 @@ swSelf.addEventListener("fetch", (event) => {
   if (strategy === "never") return; // fall through to network
 
   if (strategy === "shell") {
+    // shell = static chunks (content-hashed, user-agnostic). Cache-first.
     event.respondWith(
       (async () => {
         const cached = await caches.match(req);
@@ -49,11 +50,6 @@ swSelf.addEventListener("fetch", (event) => {
         try {
           return await fetch(req);
         } catch {
-          // Offline + no cache: serve cached shell root for navigation requests.
-          if (req.mode === "navigate") {
-            const root = await caches.match("/");
-            if (root) return root;
-          }
           return new Response("Offline", { status: 503 });
         }
       })(),

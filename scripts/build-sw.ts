@@ -37,7 +37,10 @@ export async function buildSw(opts: BuildSwOptions): Promise<void> {
   };
   const rootMain = (manifest.rootMainFiles ?? []).map((p) => `/_next/${p}`);
   const appShell = (manifest.pages?.["/_app"] ?? []).map((p) => `/_next/${p}`);
-  const precacheList = Array.from(new Set(["/", "/login", ...rootMain, ...appShell]));
+  // Precache STATIC chunks only. HTML pages (/ and /login) are intentionally
+  // excluded because RootLayout reads getCurrentUser() and embeds per-user
+  // data — caching those would leak across users on the same browser.
+  const precacheList = Array.from(new Set([...rootMain, ...appShell]));
 
   const publicDir = join(opts.projectRoot, "public");
   await mkdir(publicDir, { recursive: true });

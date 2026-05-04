@@ -9,12 +9,12 @@ describe("getCacheStrategy", () => {
     expect(getCacheStrategy(u("/_next/static/chunks/x.js"), "DELETE")).toBe("never");
   });
 
-  it("returns 'shell' for the root and /login (GET)", () => {
-    expect(getCacheStrategy(u("/"), "GET")).toBe("shell");
-    expect(getCacheStrategy(u("/login"), "GET")).toBe("shell");
+  it("returns 'never' for HTML page navigations (root, /login) — they embed per-user data via RootLayout", () => {
+    expect(getCacheStrategy(u("/"), "GET")).toBe("never");
+    expect(getCacheStrategy(u("/login"), "GET")).toBe("never");
   });
 
-  it("returns 'shell' for /_next/static/* (GET)", () => {
+  it("returns 'shell' for /_next/static/* (GET) — content-hashed and user-agnostic", () => {
     expect(getCacheStrategy(u("/_next/static/chunks/abc.js"), "GET")).toBe("shell");
     expect(getCacheStrategy(u("/_next/static/css/app.css"), "GET")).toBe("shell");
   });

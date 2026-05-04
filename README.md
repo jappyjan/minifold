@@ -24,6 +24,8 @@ docker compose -f docker-compose.yml up -d
 
 **Thumbnails are optional.** The Compose templates include the optional `minifold-thumbs` service (Puppeteer + Three.js, generates `.minifold_thumb_*.webp` sidecars on first view of each `.stl`/`.3mf`). To disable: comment out the `minifold-thumbs` service and the `MINIFOLD_THUMB_SERVICE_URL` env var. The grid falls back to type icons; the interactive 3D viewer on file detail pages still works. The `MINIFOLD_THUMB_SERVICE_URL` env var gates the `/api/thumb/*` endpoint at runtime — flip it on or off and restart, no rebuild needed. Unraid and Render templates do not include thumbs by default; add the `minifold-thumbs` container manually if you want server-side thumbnails.
 
+> **Migrating from an earlier Coolify deploy:** the Coolify-specific compose file moved from `docker-compose.yaml` to `docker-compose.coolify.yml` in the Phase 9 release. After updating to this release, edit your Coolify application's settings and set the "Docker Compose Location" path to `docker-compose.coolify.yml`, then trigger a redeploy. Without this update, Coolify will fall back to `docker-compose.yml` (which has no Traefik labels) and the proxy returns 503.
+
 ## Development
 
 ```bash

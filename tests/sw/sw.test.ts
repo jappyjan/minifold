@@ -84,7 +84,10 @@ describe("service worker", () => {
     (g as unknown as { self: unknown }).self = env.self;
     (g as unknown as { caches: unknown }).caches = env.self.caches;
     g.SHELL_VERSION = "test-sha";
-    g.PRECACHE_LIST = ["/", "/login"];
+    g.PRECACHE_LIST = [
+      "/_next/static/chunks/main-test.js",
+      "/_next/static/chunks/webpack-test.js",
+    ];
     return import("@/sw/sw");
   }
 
@@ -105,8 +108,12 @@ describe("service worker", () => {
     await installEvent.waitUntil((async () => {})());
     expect(env.cacheStores.has("shell-vtest-sha")).toBe(true);
     const cache = env.cacheStores.get("shell-vtest-sha")!;
-    expect(cache.store.keys.has("/")).toBe(true);
-    expect(cache.store.keys.has("/login")).toBe(true);
+    // Precaches static chunks only — HTML (/, /login) is intentionally NOT
+    // precached because RootLayout embeds per-user data.
+    expect(cache.store.keys.has("/_next/static/chunks/main-test.js")).toBe(true);
+    expect(cache.store.keys.has("/_next/static/chunks/webpack-test.js")).toBe(true);
+    expect(cache.store.keys.has("/")).toBe(false);
+    expect(cache.store.keys.has("/login")).toBe(false);
     expect(env.skipWaiting).toHaveBeenCalled();
   });
 

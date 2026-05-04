@@ -37,6 +37,9 @@ describe("buildSw", () => {
     const out = readFileSync(join(publicDir, "sw.js"), "utf8");
     expect(out).toContain('"abc1234"'); // SHELL_VERSION literal
     expect(out).toContain("/_next/static/chunks/main-xyz.js");
+    // PRECACHE_LIST must NOT contain HTML pages — those embed per-user state.
+    expect(out).not.toMatch(/PRECACHE_LIST_default = \[[^\]]*"\/"/);
+    expect(out).not.toMatch(/PRECACHE_LIST_default = \[[^\]]*"\/login"/);
     expect(out.length).toBeGreaterThan(500);
   });
 
