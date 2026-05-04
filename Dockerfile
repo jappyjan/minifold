@@ -20,6 +20,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ARG BUILD_SHA=""
+ENV BUILD_SHA=$BUILD_SHA
 RUN pnpm build
 
 # ---- runner ----
