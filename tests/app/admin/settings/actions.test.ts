@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
+import sharp from "sharp";
 import { createDatabase } from "@/server/db/client";
 import { runMigrations } from "@/server/db/migrate";
 import { getSetting } from "@/server/db/settings";
@@ -36,6 +37,16 @@ function fd(fields: Record<string, string | Blob>): FormData {
 }
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+
+async function realPng(): Promise<ArrayBuffer> {
+  const buf = await sharp({
+    create: { width: 64, height: 64, channels: 4, background: { r: 0, g: 255, b: 0, alpha: 1 } },
+  }).png().toBuffer();
+  // Convert Node.js Buffer to a plain ArrayBuffer (valid BlobPart in DOM types).
+  const ab = new ArrayBuffer(buf.byteLength);
+  new Uint8Array(ab).set(buf);
+  return ab;
+}
 
 describe("saveAppName", () => {
   it("rejects empty name", async () => {
@@ -100,7 +111,8 @@ describe("saveLogo (Upload mode)", () => {
   });
 
   it("writes a valid PNG and stores internal:png", async () => {
-    const blob = new Blob([PNG_MAGIC], { type: "image/png" });
+    const buf = await realPng();
+    const blob = new Blob([buf], { type: "image/png" });
     const file = new File([blob], "logo.png", { type: "image/png" });
     const { saveLogo } = await import("@/app/admin/settings/actions");
     const s = await saveLogo({}, fd({ source: "upload", file }));
@@ -113,7 +125,8 @@ describe("saveLogo (Upload mode)", () => {
 
 describe("clearLogo", () => {
   it("clears the setting and removes the file", async () => {
-    const blob = new Blob([PNG_MAGIC], { type: "image/png" });
+    const buf = await realPng();
+    const blob = new Blob([buf], { type: "image/png" });
     const file = new File([blob], "logo.png", { type: "image/png" });
     const { saveLogo, clearLogo } = await import("@/app/admin/settings/actions");
     await saveLogo({}, fd({ source: "upload", file }));
@@ -144,5 +157,60 @@ describe("saveAccentColor", () => {
     expect(s.success).toBe(true);
     const { getDatabase } = await import("@/server/db");
     expect(getSetting(getDatabase(), "accent_color")).toBe("#3b82f6");
+  });
+});
+
+describe("saveLogo (upload mode generates variants)", () => {
+  it("writes logo-180/192/512/maskable-512 alongside logo.png", async () => {
+    const { saveLogo } = await import("@/app/admin/settings/actions");
+    const buf = await realPng();
+    const blob = new Blob([buf], { type: "image/png" });
+    const s = await saveLogo({}, fd({ source: "upload", file: blob }));
+    expect(s.success).toBe(true);
+    const dir = dirname(dbPath);
+    expect(existsSync(join(dir, "logo.png"))).toBe(true);
+    expect(existsSync(join(dir, "logo-180.png"))).toBe(true);
+    expect(existsSync(join(dir, "logo-192.png"))).toBe(true);
+    expect(existsSync(join(dir, "logo-512.png"))).toBe(true);
+    expect(existsSync(join(dir, "logo-maskable-512.png"))).toBe(true);
+  });
+});
+
+describe("clearLogo (delete variants)", () => {
+  it("removes all variant files", async () => {
+    const { saveLogo, clearLogo } = await import("@/app/admin/settings/actions");
+    const buf = await realPng();
+    const blob = new Blob([buf], { type: "image/png" });
+    await saveLogo({}, fd({ source: "upload", file: blob }));
+    await clearLogo();
+    const dir = dirname(dbPath);
+    expect(existsSync(join(dir, "logo-180.png"))).toBe(false);
+    expect(existsSync(join(dir, "logo-maskable-512.png"))).toBe(false);
+  });
+});
+
+describe("saveAccentColor (regenerates maskable when logo exists)", () => {
+  it("rewrites logo-maskable-512.png with the new accent backdrop", async () => {
+    const { saveLogo, saveAccentColor } = await import("@/app/admin/settings/actions");
+    const buf = await realPng();
+    const blob = new Blob([buf], { type: "image/png" });
+    await saveLogo({}, fd({ source: "upload", file: blob }));
+    // Now change accent. The seeded migration sets accent to #3b82f6 with WCAG-passing contrast;
+    // pick another WCAG-passing colour. #2563eb passes against both light and dark backgrounds.
+    const s = await saveAccentColor({}, fd({ value: "#2563eb" }));
+    expect(s.success).toBe(true);
+    const dir = dirname(dbPath);
+    const corner = await sharp(
+      join(dir, "logo-maskable-512.png"),
+    ).extract({ left: 0, top: 0, width: 1, height: 1 }).raw().toBuffer();
+    expect([corner[0], corner[1], corner[2]]).toEqual([0x25, 0x63, 0xeb]);
+  });
+
+  it("is a no-op for variant files when no logo is uploaded", async () => {
+    const { saveAccentColor } = await import("@/app/admin/settings/actions");
+    const s = await saveAccentColor({}, fd({ value: "#2563eb" }));
+    expect(s.success).toBe(true);
+    const dir = dirname(dbPath);
+    expect(existsSync(join(dir, "logo-maskable-512.png"))).toBe(false);
   });
 });

@@ -2,13 +2,16 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { getDatabase } from "@/server/db";
-import { setSetting } from "@/server/db/settings";
+import { getSetting, setSetting } from "@/server/db/settings";
 import { validateAccent } from "@/server/auth/contrast";
 import {
   writeLogo,
   clearLogo as clearLogoFile,
+  regenerateMaskable,
 } from "@/server/settings/logo-storage";
 
 const MAX_LOGO_BYTES = 256 * 1024;
@@ -88,13 +91,19 @@ export async function saveLogo(
   const buf = Buffer.from(await fileEntry.arrayBuffer());
   let ext: "png" | "svg" | "webp";
   try {
-    ext = await writeLogo(dataDir(), buf);
+    const accentHex = getSetting(getDatabase(), "accent_color") ?? "#3b82f6";
+    ext = await writeLogo(dataDir(), buf, accentHex);
   } catch (e) {
     return { fieldErrors: { file: e instanceof Error ? e.message : "Unsupported type" } };
   }
   setSetting(getDatabase(), "logo_url", `internal:${ext}`);
   revalidatePath("/", "layout");
   revalidatePath("/api/logo");
+  revalidatePath("/api/icon/180/any.png");
+  revalidatePath("/api/icon/192/any.png");
+  revalidatePath("/api/icon/512/any.png");
+  revalidatePath("/api/icon/512/maskable.png");
+  revalidatePath("/manifest.webmanifest");
   return { success: true };
 }
 
@@ -103,6 +112,11 @@ export async function clearLogo(): Promise<void> {
   setSetting(getDatabase(), "logo_url", "");
   revalidatePath("/", "layout");
   revalidatePath("/api/logo");
+  revalidatePath("/api/icon/180/any.png");
+  revalidatePath("/api/icon/192/any.png");
+  revalidatePath("/api/icon/512/any.png");
+  revalidatePath("/api/icon/512/maskable.png");
+  revalidatePath("/manifest.webmanifest");
 }
 
 // ── Accent colour ────────────────────────────────────────────────────────────
@@ -131,6 +145,19 @@ export async function saveAccentColor(
     };
   }
   setSetting(getDatabase(), "accent_color", parsed.data.value);
+  // If a logo is currently uploaded, regenerate the maskable variant against the new accent.
+  const dir = dataDir();
+  let logoFile: string | null = null;
+  for (const e of ["png", "webp", "svg"] as const) {
+    const p = join(dir, `logo.${e}`);
+    if (existsSync(p)) { logoFile = p; break; }
+  }
+  if (logoFile) {
+    const buf = await readFile(logoFile);
+    await regenerateMaskable(dir, buf, parsed.data.value);
+    revalidatePath("/api/icon/512/maskable.png");
+  }
+  revalidatePath("/manifest.webmanifest");
   revalidatePath("/", "layout");
   return { success: true };
 }
