@@ -74,16 +74,15 @@ describe("service worker", () => {
   });
 
   async function loadSW(env: ReturnType<typeof makeMockSelf>) {
-    // Inject mocks via globalThis before importing.
-    const g = globalThis as typeof globalThis & {
-      self: unknown;
-      caches: unknown;
-      SHELL_VERSION: string;
-      PRECACHE_LIST: string[];
-    };
-    g.self = env.self;
-    g.caches = env.self.caches;
-    // SHELL_VERSION + PRECACHE_LIST come from build-time esbuild defines; provide them here.
+    // Inject mocks via globalThis before importing. `self` and `caches` already
+    // exist on globalThis with stricter types, so cast through `unknown` for
+    // the override; SHELL_VERSION and PRECACHE_LIST are esbuild build-time
+    // defines (not declared on globalThis at all), so an extension intersection
+    // is enough for them.
+    type Defines = { SHELL_VERSION: string; PRECACHE_LIST: string[] };
+    const g = globalThis as typeof globalThis & Defines;
+    (g as unknown as { self: unknown }).self = env.self;
+    (g as unknown as { caches: unknown }).caches = env.self.caches;
     g.SHELL_VERSION = "test-sha";
     g.PRECACHE_LIST = ["/", "/login"];
     return import("@/sw/sw");
