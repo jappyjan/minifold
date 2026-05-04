@@ -124,14 +124,14 @@ node -e "const s = require('sharp'); s({create:{width:8,height:8,channels:4,back
 
 Expected: `sharp ok, bytes: <some number>`. If this errors with "Could not load the sharp module" on macOS, run `pnpm rebuild sharp` and try again.
 
-- [ ] **Step 4: Verify @khmyznikov/pwa-install package metadata**
+- [ ] **Step 4: Verify @khmyznikov/pwa-install resolves**
 
 Run:
 ```bash
-node -e "const p = require('@khmyznikov/pwa-install/package.json'); console.log(p.name, p.version)"
+pnpm list @khmyznikov/pwa-install
 ```
 
-Expected: `@khmyznikov/pwa-install 0.6.x` (or newer). Confirms the install resolved.
+Expected: tree output showing `@khmyznikov/pwa-install 0.6.x`. (The package's `exports` field doesn't whitelist `./package.json`, so the obvious `node -e "require('@khmyznikov/pwa-install/package.json')"` errors with `ERR_PACKAGE_PATH_NOT_EXPORTED` even when the package is installed correctly.)
 
 - [ ] **Step 5: Commit**
 
