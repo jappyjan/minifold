@@ -9,6 +9,7 @@ import { SettingsProvider } from "@/components/SettingsContext";
 import { getDatabase } from "@/server/db";
 import { getAllSettings } from "@/server/db/settings";
 import { getCurrentUser } from "@/server/auth/current-user";
+import { PWAClient } from "@/components/pwa/PWAClient";
 
 export async function generateMetadata() {
   const settings = getAllSettings(getDatabase());
@@ -45,12 +46,28 @@ export default async function RootLayout({
 
   return (
     <html lang="en" style={{ "--accent": accent } as CSSProperties}>
+      <head>
+        <link rel="manifest" href="/manifest.webmanifest" />
+        <link rel="apple-touch-icon" href="/api/icon/180/any.png" />
+        <meta name="theme-color" content={accent} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                window.__minifoldInstallEvent = e;
+              });
+            `,
+          }}
+        />
+      </head>
       <body className="bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-50">
         <TRPCProvider>
           <SettingsProvider value={{ appName, accent, logoUrl }}>
             <AppShell sidebar={<Sidebar appName={appName} />}>{children}</AppShell>
           </SettingsProvider>
         </TRPCProvider>
+        <PWAClient />
       </body>
     </html>
   );
