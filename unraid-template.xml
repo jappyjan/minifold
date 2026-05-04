@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>minifold</Name>
+  <Repository>ghcr.io/jappyjan/minifold:latest</Repository>
+  <Registry>https://ghcr.io/jappyjan/minifold</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/jappyjan/minifold/issues</Support>
+  <Project>https://github.com/jappyjan/minifold</Project>
+  <Overview>Self-hosted file browser for 3D print files (STL, 3MF), documents (Markdown, PDF), and arbitrary folder structures. First boot launches a setup wizard.
+
+For server-side thumbnails, also install the `minifold-thumbs` Community Application and set this app's MINIFOLD_THUMB_SERVICE_URL to the thumb container's URL.</Overview>
+  <Category>Productivity: Other:</Category>
+  <WebUI>http://[IP]:[PORT:3000]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/jappyjan/minifold/main/unraid-template.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/jappyjan/minifold/main/docs/unraid-icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="3000" Default="3000" Mode="tcp" Description="HTTP port" Type="Port" Display="always" Required="true" Mask="false">3000</Config>
+  <Config Name="App Data" Target="/app/data" Default="/mnt/user/appdata/minifold" Mode="rw" Description="SQLite database + uploaded logo" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/minifold</Config>
+  <Config Name="Files" Target="/files" Default="/mnt/user/files" Mode="rw" Description="Root directory for the local storage provider" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/files</Config>
+  <Config Name="DATABASE_PATH" Target="DATABASE_PATH" Default="/app/data/minifold.db" Mode="" Description="SQLite database path inside the container" Type="Variable" Display="advanced" Required="true" Mask="false">/app/data/minifold.db</Config>
+  <Config Name="MINIFOLD_THUMB_SERVICE_URL" Target="MINIFOLD_THUMB_SERVICE_URL" Default="" Mode="" Description="If set, enables server-side thumbnails via the minifold-thumbs container (e.g. http://minifold-thumbs:3001)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>
