@@ -1,0 +1,31 @@
+# Render one-click deploy for Minifold. https://render.com/deploy
+#
+# Render allows ONE persistent disk per service, so this template mounts only
+# /app/data (SQLite + uploaded logo). For the file-content volume, choose ONE:
+#
+#   1. RECOMMENDED: configure an S3-compatible storage provider in the setup
+#      wizard. Phase 3.5 added full S3 support; this is the cleanest fit
+#      for Render's per-service-disk model.
+#
+#   2. Alternative: change the disk's mountPath to a parent like /data,
+#      set DATABASE_PATH=/data/minifold.db, and bind /data/files when
+#      you configure the local provider in the setup wizard. Single combined
+#      disk, sized to fit your file content.
+#
+# The thumbnail worker is not included. Add it as a second `web` service if
+# you want server-side thumbnails (~$7/mo extra on Render's starter tier).
+
+services:
+  - type: web
+    name: minifold
+    runtime: docker
+    repo: https://github.com/jappyjan/minifold
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_PATH
+        value: /app/data/minifold.db
+    disk:
+      name: minifold-data
+      mountPath: /app/data
+      sizeGB: 1
