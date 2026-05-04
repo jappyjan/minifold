@@ -1,9 +1,17 @@
-import { writeFile, unlink } from "node:fs/promises";
+import { writeFile, unlink, rename } from "node:fs/promises";
 import { existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { resizeAny, composeMaskable } from "@/server/settings/icon-rendering";
 
 export type LogoExt = "png" | "svg" | "webp";
 export const LOGO_EXTS: readonly LogoExt[] = ["png", "svg", "webp"];
+
+const VARIANT_FILES = [
+  "logo-180.png",
+  "logo-192.png",
+  "logo-512.png",
+  "logo-maskable-512.png",
+] as const;
 
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -21,7 +29,6 @@ function isWebp(buf: Buffer): boolean {
 }
 
 function isSvg(buf: Buffer): boolean {
-  // Tolerate leading whitespace + BOM. Check first ~64 bytes.
   const head = buf.toString("utf8", 0, Math.min(64, buf.length)).trimStart();
   const lower = head.toLowerCase();
   return lower.startsWith("<?xml") || lower.startsWith("<svg");
@@ -34,16 +41,48 @@ export function sniffImageType(buf: Buffer): LogoExt | null {
   return null;
 }
 
-export async function writeLogo(dir: string, buf: Buffer): Promise<LogoExt> {
+async function atomicWrite(path: string, buf: Buffer): Promise<void> {
+  const tmp = `${path}.tmp`;
+  await writeFile(tmp, buf);
+  await rename(tmp, path);
+}
+
+// SVG decoding through sharp uses librsvg with limits; if the SVG can't be rasterised,
+// this will throw. Operators uploading exotic SVGs should re-export to PNG.
+async function writeVariants(
+  dir: string,
+  buf: Buffer,
+  accentHex: string,
+): Promise<void> {
+  const [v180, v192, v512, mask] = await Promise.all([
+    resizeAny(buf, 180),
+    resizeAny(buf, 192),
+    resizeAny(buf, 512),
+    composeMaskable(buf, accentHex),
+  ]);
+  await Promise.all([
+    atomicWrite(join(dir, "logo-180.png"), v180),
+    atomicWrite(join(dir, "logo-192.png"), v192),
+    atomicWrite(join(dir, "logo-512.png"), v512),
+    atomicWrite(join(dir, "logo-maskable-512.png"), mask),
+  ]);
+}
+
+export async function writeLogo(
+  dir: string,
+  buf: Buffer,
+  accentHex: string,
+): Promise<LogoExt> {
   const ext = sniffImageType(buf);
   if (!ext) throw new Error("Unsupported image type (must be PNG, SVG, or WebP)");
-  // Remove any sibling logos first.
+  // Remove any sibling logo with a different extension first.
   for (const e of LOGO_EXTS) {
     if (e === ext) continue;
     const p = join(dir, `logo.${e}`);
     if (existsSync(p)) await unlink(p);
   }
   await writeFile(join(dir, `logo.${ext}`), buf);
+  await writeVariants(dir, buf, accentHex);
   return ext;
 }
 
@@ -52,9 +91,22 @@ export function clearLogo(dir: string): void {
     const p = join(dir, `logo.${e}`);
     if (existsSync(p)) unlinkSync(p);
   }
+  for (const f of VARIANT_FILES) {
+    const p = join(dir, f);
+    if (existsSync(p)) unlinkSync(p);
+  }
 }
 
 export function resolveLogoPath(dir: string, ext: LogoExt): string | null {
   const p = join(dir, `logo.${ext}`);
   return existsSync(p) ? p : null;
+}
+
+export async function regenerateMaskable(
+  dir: string,
+  currentBuffer: Buffer,
+  accentHex: string,
+): Promise<void> {
+  const mask = await composeMaskable(currentBuffer, accentHex);
+  await atomicWrite(join(dir, "logo-maskable-512.png"), mask);
 }
