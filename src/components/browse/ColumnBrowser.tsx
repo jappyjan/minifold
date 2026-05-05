@@ -106,12 +106,8 @@ export function ColumnBrowser({
       >
         {columns.map((col, i) => {
           const filtered = filterEntriesByCategory(col.entries, visibleSet);
-          // Root column uses the provider name; non-root columns prefix with
-          // › so the header text doesn't collide with sibling entry names
-          // (both would otherwise match a `getByText(/^name$/)` query).
-          const lastSegment = col.path.split("/").pop()!;
           const headerLabel =
-            col.path === "" ? providerName : `› ${lastSegment}`;
+            col.path === "" ? providerName : col.path.split("/").pop()!;
           return (
             <Column
               key={col.path || "__root__"}

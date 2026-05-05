@@ -57,8 +57,10 @@ describe("ColumnBrowser", () => {
       />,
     );
     expect(screen.getByText("NAS")).toBeInTheDocument();
-    expect(screen.getByText(/^foo$/)).toBeInTheDocument();
-    expect(screen.getByText(/^bar$/)).toBeInTheDocument();
+    // "foo" appears twice: as a row in column 0 and as the header of column 1.
+    expect(screen.getAllByText(/^foo$/)).toHaveLength(2);
+    // "bar" appears twice: as a row in column 1 and as the header of column 2.
+    expect(screen.getAllByText(/^bar$/)).toHaveLength(2);
     expect(screen.getByText("a.stl")).toBeInTheDocument();
   });
 
