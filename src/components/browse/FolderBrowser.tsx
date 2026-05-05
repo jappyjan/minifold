@@ -7,12 +7,11 @@ import { setCachedDir } from "@/lib/dir-cache-idb";
 import {
   type Category,
   DEFAULT_VISIBLE,
-  categoryOfKind,
+  filterEntriesByCategory,
   parseShowParam,
   readPersistedVisible,
   writePersistedVisible,
 } from "@/lib/browse-filter";
-import { fileKindOf } from "@/server/browse/file-kind";
 import type { Entry } from "@/server/storage/types";
 import { FolderGrid } from "./FolderGrid";
 import { FilterDropdown } from "./FilterDropdown";
@@ -34,17 +33,12 @@ function applyGridFilter(
   sidecarSet: ReadonlySet<string>,
   visibleCategories: ReadonlySet<Category>,
 ): Entry[] {
-  return sortEntries(
-    entries.filter((e) => {
-      if (descriptionName && e.name === descriptionName) return false;
-      if (sidecarSet.has(e.name)) return false;
-      if (e.type === "file") {
-        const cat = categoryOfKind(fileKindOf(e.name));
-        if (!visibleCategories.has(cat)) return false;
-      }
-      return true;
-    }),
-  );
+  const afterMeta = entries.filter((e) => {
+    if (descriptionName && e.name === descriptionName) return false;
+    if (sidecarSet.has(e.name)) return false;
+    return true;
+  });
+  return sortEntries(filterEntriesByCategory(afterMeta, visibleCategories));
 }
 
 function resolveInitialVisible(showParam: string | null): Set<Category> {

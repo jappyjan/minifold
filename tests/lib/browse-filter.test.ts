@@ -4,11 +4,13 @@ import {
   DEFAULT_VISIBLE,
   STORAGE_KEY,
   categoryOfKind,
+  filterEntriesByCategory,
   parseShowParam,
   readPersistedVisible,
   writePersistedVisible,
 } from "@/lib/browse-filter";
 import type { FileKind } from "@/server/browse/file-kind";
+import type { Entry } from "@/server/storage/types";
 
 beforeEach(() => {
   localStorage.clear();
@@ -145,5 +147,40 @@ describe("readPersistedVisible / writePersistedVisible", () => {
   it("uses the correct storage key", () => {
     writePersistedVisible(["image"]);
     expect(localStorage.getItem(STORAGE_KEY)).not.toBeNull();
+  });
+});
+
+const f = (name: string): Entry => ({ name, type: "file", size: 0, modifiedAt: new Date(0) });
+const d = (name: string): Entry => ({ name, type: "directory", size: 0, modifiedAt: new Date(0) });
+
+describe("filterEntriesByCategory", () => {
+  it("keeps directories regardless of visible categories", () => {
+    const out = filterEntriesByCategory([d("sub"), f("misc.bin")], new Set([]));
+    expect(out.map((e) => e.name)).toEqual(["sub"]);
+  });
+
+  it("filters files by category", () => {
+    const out = filterEntriesByCategory(
+      [f("a.stl"), f("readme.md"), f("photo.png"), f("misc.bin")],
+      new Set(["3d", "image"]),
+    );
+    expect(out.map((e) => e.name).sort()).toEqual(["a.stl", "photo.png"].sort());
+  });
+
+  it("returns empty when no categories visible and no directories", () => {
+    const out = filterEntriesByCategory([f("a.stl"), f("readme.md")], new Set([]));
+    expect(out).toEqual([]);
+  });
+
+  it("does not mutate the input array", () => {
+    const input = [f("a.stl"), f("readme.md")];
+    filterEntriesByCategory(input, new Set([]));
+    expect(input).toHaveLength(2);
+  });
+
+  it("preserves input order (does not re-sort)", () => {
+    const input = [f("z.stl"), f("a.stl")];
+    const out = filterEntriesByCategory(input, new Set(["3d"]));
+    expect(out.map((e) => e.name)).toEqual(["z.stl", "a.stl"]);
   });
 });

@@ -1,4 +1,6 @@
 import type { FileKind } from "@/server/browse/file-kind";
+import { fileKindOf } from "@/server/browse/file-kind";
+import type { Entry } from "@/server/storage/types";
 
 export const CATEGORIES = ["3d", "doc", "image", "other"] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -82,4 +84,17 @@ export function readPersistedVisible(): Category[] | null {
 export function writePersistedVisible(visible: readonly Category[]): void {
   if (typeof localStorage === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ visible }));
+}
+
+export function filterEntriesByCategory(
+  entries: readonly Entry[],
+  visibleCategories: ReadonlySet<Category>,
+): Entry[] {
+  return entries.filter((e) => {
+    if (e.type === "file") {
+      const cat = categoryOfKind(fileKindOf(e.name));
+      if (!visibleCategories.has(cat)) return false;
+    }
+    return true;
+  });
 }
