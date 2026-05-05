@@ -11,9 +11,10 @@ import type { Entry } from "@/server/storage/types";
 import { FolderBrowser } from "@/components/browse/FolderBrowser";
 import { STORAGE_KEY } from "@/lib/browse-filter";
 
-// Mock next/navigation for useSearchParams
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  usePathname: () => "/nas",
 }));
 
 function file(name: string): Entry {
@@ -197,5 +198,13 @@ describe("FolderBrowser", () => {
       expect(screen.getByText("readme.md")).toBeInTheDocument();
       expect(screen.queryByText("misc.bin")).not.toBeInTheDocument();
     });
+  });
+
+  it("renders the ViewToggle with current='grid'", () => {
+    renderBrowser([file("a.stl")]);
+    const grid = screen.getByRole("button", { name: /grid/i });
+    expect(grid).toHaveAttribute("aria-pressed", "true");
+    const column = screen.getByRole("button", { name: /column/i });
+    expect(column).toHaveAttribute("aria-pressed", "false");
   });
 });

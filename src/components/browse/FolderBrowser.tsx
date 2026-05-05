@@ -15,6 +15,7 @@ import {
 import type { Entry } from "@/server/storage/types";
 import { FolderGrid } from "./FolderGrid";
 import { FilterDropdown } from "./FilterDropdown";
+import { ViewToggle } from "./ViewToggle";
 
 type Props = {
   providerSlug: string;
@@ -94,7 +95,8 @@ export function FolderBrowser({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-2">
+        <ViewToggle current="grid" />
         <FilterDropdown visible={visibleSet} onChange={handleFilterChange} />
       </div>
       <FolderGrid
