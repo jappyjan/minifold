@@ -13,19 +13,50 @@ import { sortEntries } from "@/server/browse/sort";
 import { computeDirHash } from "@/server/browse/dir-hash";
 import { findFolderDescription } from "@/server/browse/description-file";
 import { findSidecarMarkdowns } from "@/server/browse/find-sidecars";
-import { decodePathSegments } from "@/server/browse/encode-path";
+import { decodePathSegments, encodePathSegments } from "@/server/browse/encode-path";
 import { listWithCache } from "@/server/browse/list-cache";
+import { columnAncestorChain } from "@/server/browse/ancestor-chain";
 import { isThumbnailServiceEnabled } from "@/server/thumb/config";
 import { Breadcrumbs } from "@/components/browse/Breadcrumbs";
 import { FolderBrowser } from "@/components/browse/FolderBrowser";
 import { FolderDescription } from "@/components/browse/FolderDescription";
 import { FileDetail } from "@/components/browse/FileDetail";
+import {
+  ColumnBrowser,
+  type ColumnData,
+} from "@/components/browse/ColumnBrowser";
+import { MobileColumnFallback } from "@/components/browse/MobileColumnFallback";
 import { getCurrentUser } from "@/server/auth/current-user";
-import { createAccessResolver } from "@/server/access/resolver";
+import { createAccessResolver, type Resolver } from "@/server/access/resolver";
 import { getGlobalDefaultAccess } from "@/server/access/global-default";
 
 type Params = { provider: string; path?: string[] };
-type SearchParams = { showAll?: string | string[] };
+type SearchParams = {
+  showAll?: string | string[];
+  view?: string | string[];
+};
+
+function readViewParam(sp: SearchParams): "grid" | "column" {
+  const v = Array.isArray(sp.view) ? sp.view[0] : sp.view;
+  return v === "column" ? "column" : "grid";
+}
+
+async function loadAllowedListing(
+  provider: ReturnType<typeof providerFromRow>,
+  resolver: Resolver,
+  path: string,
+): Promise<{ entries: Entry[]; hash: string }> {
+  const raw = await listWithCache(provider, path);
+  const hash = computeDirHash(raw);
+  const visibleAfterHidden = raw.filter((e) => !isHiddenEntry(e.name));
+  const allowed: Entry[] = [];
+  for (const child of visibleAfterHidden) {
+    const childPath = path === "" ? child.name : `${path}/${child.name}`;
+    const decision = await resolver.resolve(childPath, child.type);
+    if (decision === "allow") allowed.push(child);
+  }
+  return { entries: sortEntries(allowed), hash };
+}
 
 export default async function BrowsePage({
   params,
@@ -43,6 +74,7 @@ export default async function BrowsePage({
   const path = segments.join("/");
   const sp = await searchParams;
   const showAll = sp.showAll === "1";
+  const view = readViewParam(sp);
 
   const user = await getCurrentUser();
   const config = row.config as { defaultAccess?: "public" | "signed-in" };
@@ -74,20 +106,66 @@ export default async function BrowsePage({
     notFound();
   }
 
-  if (entry.type === "directory") {
-    const allEntries = await listWithCache(provider, path);
-    const hash = computeDirHash(allEntries);
-    const visibleAfterHidden = allEntries.filter((e) => !isHiddenEntry(e.name));
+  // Column view branch
+  if (view === "column") {
+    const chain = columnAncestorChain(segments, entry.type);
 
-    // Filter children by the resolver — per-path enforcement on every entry.
-    const allowedChildren: Entry[] = [];
-    for (const child of visibleAfterHidden) {
-      const childPath = path === "" ? child.name : `${path}/${child.name}`;
-      const childDecision = await resolver.resolve(childPath, child.type);
-      if (childDecision === "allow") allowedChildren.push(child);
+    // The resolver's per-request cache is intentionally shared across these
+    // parallel calls; concurrent cache-miss writes are idempotent.
+    const columns: ColumnData[] = await Promise.all(
+      chain.map(async (colPath) => {
+        const { entries, hash } = await loadAllowedListing(
+          provider,
+          resolver,
+          colPath,
+        );
+        return { path: colPath, entries, hash };
+      }),
+    );
+
+    // Per-column active row mapping: column at depth N highlights segments[N].
+    const activeNames: (string | null)[] = chain.map((_, i) => segments[i] ?? null);
+
+    let selectedLeaf: Entry | null = null;
+    let leafParentPath: string | null = null;
+    if (entry.type === "file") {
+      selectedLeaf = entry;
+      leafParentPath = segments.slice(0, -1).join("/");
     }
-    const visible = sortEntries(allowedChildren);
 
+    const encodedPath = path ? `/${encodePathSegments(path)}` : "";
+    const gridHref = `/${slug}${encodedPath}${
+      sp.showAll === "1" ? "?showAll=1" : ""
+    }`;
+
+    return (
+      <div className="flex flex-col gap-4">
+        <Breadcrumbs
+          providerSlug={slug}
+          providerName={row.name}
+          pathSegments={segments}
+        />
+        <ColumnBrowser
+          providerSlug={slug}
+          providerName={row.name}
+          columns={columns}
+          activeNames={activeNames}
+          selectedLeaf={selectedLeaf}
+          leafParentPath={leafParentPath}
+          thumbnailsEnabled={isThumbnailServiceEnabled()}
+        />
+        <MobileColumnFallback gridHref={gridHref} />
+      </div>
+    );
+  }
+
+  // Grid / detail (existing behaviour)
+  if (entry.type === "directory") {
+    const { entries: visible, hash } = await loadAllowedListing(
+      provider,
+      resolver,
+      path,
+    );
     const description = findFolderDescription(visible);
     const sidecars = findSidecarMarkdowns(visible);
     return (
