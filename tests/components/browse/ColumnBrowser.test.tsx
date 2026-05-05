@@ -184,4 +184,44 @@ describe("ColumnBrowser", () => {
     expect(screen.getByText("subfolder")).toBeInTheDocument();
     expect(screen.queryByText("misc.bin")).not.toBeInTheDocument();
   });
+
+  it("re-runs scroll-into-view when columns change to a different sibling chain", () => {
+    const scrollToMock = vi.fn();
+    // happy-dom does not implement scrollTo by default; stub on Element prototype
+    Element.prototype.scrollTo = scrollToMock as unknown as typeof Element.prototype.scrollTo;
+
+    const { rerender } = render(
+      <ColumnBrowser
+        providerSlug="nas"
+        providerName="NAS"
+        columns={[
+          { path: "", entries: [d("foo"), d("bar")], hash: "h0" },
+          { path: "foo", entries: [], hash: "h1" },
+        ]}
+        activeNames={["foo", null]}
+        selectedLeaf={null}
+        leafParentPath={null}
+        thumbnailsEnabled={false}
+      />,
+    );
+    expect(scrollToMock).toHaveBeenCalled();
+    scrollToMock.mockClear();
+
+    // Sibling navigation at the same depth: same length, different chain.
+    rerender(
+      <ColumnBrowser
+        providerSlug="nas"
+        providerName="NAS"
+        columns={[
+          { path: "", entries: [d("foo"), d("bar")], hash: "h0" },
+          { path: "bar", entries: [], hash: "h2" },
+        ]}
+        activeNames={["bar", null]}
+        selectedLeaf={null}
+        leafParentPath={null}
+        thumbnailsEnabled={false}
+      />,
+    );
+    expect(scrollToMock).toHaveBeenCalled();
+  });
 });

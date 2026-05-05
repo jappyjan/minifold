@@ -86,12 +86,18 @@ export function ColumnBrowser({
     }
   }, [providerSlug, columns]);
 
-  // Scroll the rightmost column into view on mount and when columns change.
+  // Scroll the rightmost column into view on mount and when the chain changes.
+  // Depend on the chain identity (paths joined) — not just length — so that
+  // sibling navigation at the same depth still triggers a scroll.
+  const chainKey = useMemo(
+    () => columns.map((c) => c.path).join("|"),
+    [columns],
+  );
   useEffect(() => {
     const el = stripRef.current;
     if (!el) return;
     el.scrollTo({ left: el.scrollWidth, behavior: "instant" as ScrollBehavior });
-  }, [columns.length]);
+  }, [chainKey]);
 
   return (
     <div className="hidden md:flex flex-col gap-3">

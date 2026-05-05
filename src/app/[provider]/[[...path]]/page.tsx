@@ -17,6 +17,7 @@ import { decodePathSegments, encodePathSegments } from "@/server/browse/encode-p
 import { listWithCache } from "@/server/browse/list-cache";
 import { columnAncestorChain } from "@/server/browse/ancestor-chain";
 import { isThumbnailServiceEnabled } from "@/server/thumb/config";
+import { stripViewParam } from "@/lib/browse-view";
 import { Breadcrumbs } from "@/components/browse/Breadcrumbs";
 import { FolderBrowser } from "@/components/browse/FolderBrowser";
 import { FolderDescription } from "@/components/browse/FolderDescription";
@@ -134,9 +135,15 @@ export default async function BrowsePage({
     }
 
     const encodedPath = path ? `/${encodePathSegments(path)}` : "";
-    const gridHref = `/${slug}${encodedPath}${
-      sp.showAll === "1" ? "?showAll=1" : ""
-    }`;
+    const incomingParams = new URLSearchParams();
+    for (const [k, raw] of Object.entries(sp)) {
+      if (raw === undefined) continue;
+      const v = Array.isArray(raw) ? raw[0] : raw;
+      if (v === undefined) continue;
+      incomingParams.set(k, v);
+    }
+    const gridQs = stripViewParam(incomingParams);
+    const gridHref = `/${slug}${encodedPath}${gridQs ? `?${gridQs}` : ""}`;
 
     return (
       <div className="flex flex-col gap-4">
