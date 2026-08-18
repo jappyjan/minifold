@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Bounds, OrbitControls } from "@react-three/drei";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
@@ -41,6 +41,14 @@ function FallbackBox({ children }: { children: ReactNode }) {
 
 function formatMb(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function Headlight({ intensity = 1.2 }: { intensity?: number }) {
+  const light = useRef<THREE.PointLight>(null);
+  useFrame(({ camera }) => {
+    light.current?.position.copy(camera.position);
+  });
+  return <pointLight ref={light} intensity={intensity} decay={0} />;
 }
 
 class ViewerErrorBoundary extends Component<
@@ -157,7 +165,7 @@ function ViewerInner({
     <div className="relative h-[60vh] w-full overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 md:h-[70vh]">
       <Canvas camera={{ position: [0, 0, 100], fov: 45 }}>
         <ambientLight intensity={0.6} />
-        <directionalLight position={[5, 5, 5]} intensity={0.8} />
+        <Headlight />
         <Suspense fallback={null}>
           {model && (
             <Bounds
