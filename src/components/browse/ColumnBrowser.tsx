@@ -22,6 +22,7 @@ export type ColumnData = {
   path: string;
   entries: readonly Entry[];
   hash: string;
+  hiddenCount: number;
 };
 
 type Props = {

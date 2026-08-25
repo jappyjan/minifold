@@ -74,8 +74,27 @@ describe("browse.list", () => {
       providerSlug: "nas",
       path: "",
       knownHash: first.hash,
+      knownShowHidden: false,
     });
     expect(second).toEqual({ changed: false, hash: first.hash });
+  });
+
+  it("returns changed:true when knownHash was produced with another hidden-file mode", async () => {
+    writeFileSync(join(storageRoot, ".env"), "SECRET=1\n");
+    const caller = appRouter.createCaller({ currentUser: user });
+    const hidden = await caller.browse.list({ providerSlug: "nas", path: "" });
+    if (!hidden.changed) throw new Error("expected changed:true");
+
+    const revealed = await caller.browse.list({
+      providerSlug: "nas",
+      path: "",
+      knownHash: hidden.hash,
+      knownShowHidden: false,
+      showHidden: true,
+    });
+    expect(revealed.changed).toBe(true);
+    if (!revealed.changed) throw new Error("expected changed:true");
+    expect(revealed.entries.map((entry) => entry.name)).toContain(".env");
   });
 
   it("returns changed:true when knownHash is stale", async () => {
@@ -99,6 +118,30 @@ describe("browse.list", () => {
     const result = await caller.browse.list({ providerSlug: "nas", path: "" });
     if (!result.changed) throw new Error("expected changed:true");
     expect(result.entries.map((e) => e.name)).toEqual(["a.stl", "b.stl"]);
+  });
+
+  it("hides dotfiles by default", async () => {
+    writeFileSync(join(storageRoot, ".env"), "SECRET=1\n");
+    const caller = appRouter.createCaller({ currentUser: user });
+    const result = await caller.browse.list({ providerSlug: "nas", path: "" });
+    if (!result.changed) throw new Error("expected changed:true");
+    expect(result.entries.map((e) => e.name)).toEqual(["a.stl", "b.stl"]);
+  });
+
+  it("showHidden:true reveals dotfiles but never .minifold_* internals", async () => {
+    writeFileSync(join(storageRoot, ".env"), "SECRET=1\n");
+    writeFileSync(join(storageRoot, ".minifold_access.yaml"), "default: signed-in\n");
+    const caller = appRouter.createCaller({ currentUser: user });
+    const result = await caller.browse.list({
+      providerSlug: "nas",
+      path: "",
+      showHidden: true,
+    });
+    if (!result.changed) throw new Error("expected changed:true");
+    const names = result.entries.map((e) => e.name);
+    expect(names).toContain(".env");
+    expect(names).not.toContain(".minifold_access.yaml");
+    expect(names).toHaveLength(3);
   });
 
   it("returns NOT_FOUND for an unknown provider slug", async () => {

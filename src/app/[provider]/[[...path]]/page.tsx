@@ -8,7 +8,11 @@ import {
   PathTraversalError,
   type Entry,
 } from "@/server/storage/types";
-import { isHiddenEntry } from "@/server/browse/hidden";
+import {
+  isHiddenEntry,
+  isInternalEntry,
+  isListableEntry,
+} from "@/server/browse/hidden";
 import { sortEntries } from "@/server/browse/sort";
 import { computeDirHash } from "@/server/browse/dir-hash";
 import { findFolderDescription } from "@/server/browse/description-file";
@@ -17,7 +21,12 @@ import { decodePathSegments, encodePathSegments } from "@/server/browse/encode-p
 import { listWithCache } from "@/server/browse/list-cache";
 import { columnAncestorChain } from "@/server/browse/ancestor-chain";
 import { isThumbnailServiceEnabled } from "@/server/thumb/config";
-import { stripViewParam } from "@/lib/browse-view";
+import {
+  firstSearchParam,
+  mergeSearchParams,
+  searchParamsFromRecord,
+  stripViewParam,
+} from "@/lib/browse-view";
 import { Breadcrumbs } from "@/components/browse/Breadcrumbs";
 import { FolderBrowser } from "@/components/browse/FolderBrowser";
 import { FolderDescription } from "@/components/browse/FolderDescription";
@@ -32,31 +41,44 @@ import { createAccessResolver, type Resolver } from "@/server/access/resolver";
 import { getGlobalDefaultAccess } from "@/server/access/global-default";
 
 type Params = { provider: string; path?: string[] };
-type SearchParams = {
-  showAll?: string | string[];
-  view?: string | string[];
-};
+type SearchParams = Record<string, string | string[] | undefined>;
 
 function readViewParam(sp: SearchParams): "grid" | "column" {
-  const v = Array.isArray(sp.view) ? sp.view[0] : sp.view;
-  return v === "column" ? "column" : "grid";
+  return firstSearchParam(sp.view) === "column" ? "column" : "grid";
+}
+
+function toggleBrowseParamHref(
+  sp: SearchParams,
+  key: "showAll" | "showHidden",
+  enabled: boolean,
+): string {
+  const qs = mergeSearchParams(searchParamsFromRecord(sp), {
+    [key]: enabled ? null : "1",
+  });
+  return qs ? `?${qs}` : "?";
 }
 
 async function loadAllowedListing(
   provider: ReturnType<typeof providerFromRow>,
   resolver: Resolver,
   path: string,
-): Promise<{ entries: Entry[]; hash: string }> {
+  showHidden: boolean,
+): Promise<{ entries: Entry[]; hash: string; hiddenCount: number }> {
   const raw = await listWithCache(provider, path);
   const hash = computeDirHash(raw);
-  const visibleAfterHidden = raw.filter((e) => !isHiddenEntry(e.name));
+  const hiddenCount = raw.filter(
+    (e) => isHiddenEntry(e.name) && !isInternalEntry(e.name),
+  ).length;
+  const visibleAfterHidden = raw.filter((e) =>
+    isListableEntry(e.name, showHidden),
+  );
   const allowed: Entry[] = [];
   for (const child of visibleAfterHidden) {
     const childPath = path === "" ? child.name : `${path}/${child.name}`;
     const decision = await resolver.resolve(childPath, child.type);
     if (decision === "allow") allowed.push(child);
   }
-  return { entries: sortEntries(allowed), hash };
+  return { entries: sortEntries(allowed), hash, hiddenCount };
 }
 
 export default async function BrowsePage({
@@ -74,7 +96,8 @@ export default async function BrowsePage({
   const provider = providerFromRow(row);
   const path = segments.join("/");
   const sp = await searchParams;
-  const showAll = sp.showAll === "1";
+  const showAll = firstSearchParam(sp.showAll) === "1";
+  const showHidden = firstSearchParam(sp.showHidden) === "1";
   const view = readViewParam(sp);
 
   const user = await getCurrentUser();
@@ -115,17 +138,20 @@ export default async function BrowsePage({
     // parallel calls; concurrent cache-miss writes are idempotent.
     const columns: ColumnData[] = await Promise.all(
       chain.map(async (colPath) => {
-        const { entries, hash } = await loadAllowedListing(
+        const { entries, hash, hiddenCount } = await loadAllowedListing(
           provider,
           resolver,
           colPath,
+          showHidden,
         );
-        return { path: colPath, entries, hash };
+        return { path: colPath, entries, hash, hiddenCount };
       }),
     );
 
     // Per-column active row mapping: column at depth N highlights segments[N].
     const activeNames: (string | null)[] = chain.map((_, i) => segments[i] ?? null);
+
+    const leafHiddenCount = columns[columns.length - 1]?.hiddenCount ?? 0;
 
     let selectedLeaf: Entry | null = null;
     let leafParentPath: string | null = null;
@@ -135,13 +161,7 @@ export default async function BrowsePage({
     }
 
     const encodedPath = path ? `/${encodePathSegments(path)}` : "";
-    const incomingParams = new URLSearchParams();
-    for (const [k, raw] of Object.entries(sp)) {
-      if (raw === undefined) continue;
-      const v = Array.isArray(raw) ? raw[0] : raw;
-      if (v === undefined) continue;
-      incomingParams.set(k, v);
-    }
+    const incomingParams = searchParamsFromRecord(sp);
     const gridQs = stripViewParam(incomingParams);
     const gridHref = `/${slug}${encodedPath}${gridQs ? `?${gridQs}` : ""}`;
 
@@ -152,6 +172,18 @@ export default async function BrowsePage({
           providerName={row.name}
           pathSegments={segments}
         />
+        {leafHiddenCount > 0 && (
+          <div className="flex justify-end">
+            <Link
+              href={toggleBrowseParamHref(sp, "showHidden", showHidden)}
+              className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+            >
+              {showHidden
+                ? `Hide hidden files (${leafHiddenCount})`
+                : `Show hidden files (${leafHiddenCount})`}
+            </Link>
+          </div>
+        )}
         <ColumnBrowser
           providerSlug={slug}
           providerName={row.name}
@@ -168,10 +200,11 @@ export default async function BrowsePage({
 
   // Grid / detail (existing behaviour)
   if (entry.type === "directory") {
-    const { entries: visible, hash } = await loadAllowedListing(
+    const { entries: visible, hash, hiddenCount } = await loadAllowedListing(
       provider,
       resolver,
       path,
+      showHidden,
     );
     const description = findFolderDescription(visible);
     const sidecars = findSidecarMarkdowns(visible);
@@ -189,16 +222,28 @@ export default async function BrowsePage({
             descriptionEntry={description}
           />
         )}
-        {sidecars.size > 0 && (
-          <div className="flex justify-end">
-            <Link
-              href={showAll ? "?" : "?showAll=1"}
-              className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
-            >
-              {showAll
-                ? `Hide description files (${sidecars.size})`
-                : `Show description files (${sidecars.size})`}
-            </Link>
+        {(sidecars.size > 0 || hiddenCount > 0) && (
+          <div className="flex justify-end gap-4">
+            {hiddenCount > 0 && (
+              <Link
+                href={toggleBrowseParamHref(sp, "showHidden", showHidden)}
+                className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+              >
+                {showHidden
+                  ? `Hide hidden files (${hiddenCount})`
+                  : `Show hidden files (${hiddenCount})`}
+              </Link>
+            )}
+            {sidecars.size > 0 && (
+              <Link
+                href={toggleBrowseParamHref(sp, "showAll", showAll)}
+                className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
+              >
+                {showAll
+                  ? `Hide description files (${sidecars.size})`
+                  : `Show description files (${sidecars.size})`}
+              </Link>
+            )}
           </div>
         )}
         <FolderBrowser
@@ -219,7 +264,7 @@ export default async function BrowsePage({
   const parentSegments = segments.slice(0, -1);
   const parentPath = parentSegments.join("/");
   const rawSiblings = (await listWithCache(provider, parentPath)).filter(
-    (e) => !isHiddenEntry(e.name),
+    (e) => isListableEntry(e.name, showHidden),
   );
   const siblings: Entry[] = [];
   for (const sib of rawSiblings) {

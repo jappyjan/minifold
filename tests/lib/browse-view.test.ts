@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   VIEW_STORAGE_KEY,
+  firstSearchParam,
   mergeSearchParams,
+  searchParamsFromRecord,
   stripViewParam,
   readPersistedView,
   writePersistedView,
@@ -36,6 +38,34 @@ describe("mergeSearchParams", () => {
     const sp = new URLSearchParams("view=grid");
     mergeSearchParams(sp, { view: "column" });
     expect(sp.get("view")).toBe("grid");
+  });
+
+  it("adds showAll without discarding other browse state", () => {
+    const sp = searchParamsFromRecord({
+      show: "3d,doc",
+      showHidden: "1",
+      view: "column",
+    });
+    expect(mergeSearchParams(sp, { showAll: "1" })).toBe(
+      "show=3d%2Cdoc&showHidden=1&view=column&showAll=1",
+    );
+  });
+});
+
+describe("searchParamsFromRecord", () => {
+  it("keeps the first value for repeated query parameters", () => {
+    const sp = searchParamsFromRecord({
+      showHidden: ["1", "0"],
+      show: "3d",
+      absent: undefined,
+    });
+    expect(sp.toString()).toBe("showHidden=1&show=3d");
+  });
+});
+
+describe("firstSearchParam", () => {
+  it("returns the first repeated value", () => {
+    expect(firstSearchParam(["1", "0"])).toBe("1");
   });
 });
 
