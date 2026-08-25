@@ -46,9 +46,9 @@ describe("ColumnBrowser", () => {
         providerSlug="nas"
         providerName="NAS"
         columns={[
-          { path: "", entries: [d("foo")], hash: "h0" },
-          { path: "foo", entries: [d("bar")], hash: "h1" },
-          { path: "foo/bar", entries: [f("a.stl")], hash: "h2" },
+          { path: "", entries: [d("foo")], hash: "h0", hiddenCount: 0 },
+          { path: "foo", entries: [d("bar")], hash: "h1", hiddenCount: 0 },
+          { path: "foo/bar", entries: [f("a.stl")], hash: "h2", hiddenCount: 0 },
         ]}
         activeNames={["foo", "bar", null]}
         selectedLeaf={null}
@@ -70,8 +70,8 @@ describe("ColumnBrowser", () => {
         providerSlug="nas"
         providerName="NAS"
         columns={[
-          { path: "", entries: [d("foo"), d("baz")], hash: "h0" },
-          { path: "foo", entries: [d("bar")], hash: "h1" },
+          { path: "", entries: [d("foo"), d("baz")], hash: "h0", hiddenCount: 0 },
+          { path: "foo", entries: [d("bar")], hash: "h1", hiddenCount: 0 },
         ]}
         activeNames={["foo", null]}
         selectedLeaf={null}
@@ -94,7 +94,7 @@ describe("ColumnBrowser", () => {
         providerSlug="nas"
         providerName="NAS"
         columns={[
-          { path: "", entries: [f("a.stl")], hash: "h0" },
+          { path: "", entries: [f("a.stl")], hash: "h0", hiddenCount: 0 },
         ]}
         activeNames={["a.stl"]}
         selectedLeaf={f("a.stl")}
@@ -110,7 +110,7 @@ describe("ColumnBrowser", () => {
       <ColumnBrowser
         providerSlug="nas"
         providerName="NAS"
-        columns={[{ path: "", entries: [d("foo")], hash: "h0" }]}
+        columns={[{ path: "", entries: [d("foo")], hash: "h0", hiddenCount: 0 }]}
         activeNames={[null]}
         selectedLeaf={null}
         leafParentPath={null}
@@ -125,7 +125,7 @@ describe("ColumnBrowser", () => {
       <ColumnBrowser
         providerSlug="nas"
         providerName="NAS"
-        columns={[{ path: "", entries: [], hash: "h0" }]}
+        columns={[{ path: "", entries: [], hash: "h0", hiddenCount: 0 }]}
         activeNames={[null]}
         selectedLeaf={null}
         leafParentPath={null}
@@ -142,8 +142,8 @@ describe("ColumnBrowser", () => {
         providerSlug="nas"
         providerName="NAS"
         columns={[
-          { path: "", entries: [d("foo")], hash: "h0" },
-          { path: "foo", entries: [f("a.stl")], hash: "h1" },
+          { path: "", entries: [d("foo")], hash: "h0", hiddenCount: 0 },
+          { path: "foo", entries: [f("a.stl")], hash: "h1", hiddenCount: 0 },
         ]}
         activeNames={["foo", null]}
         selectedLeaf={null}
@@ -171,6 +171,7 @@ describe("ColumnBrowser", () => {
             path: "",
             entries: [f("part.step"), f("misc.bin"), d("subfolder")],
             hash: "h0",
+            hiddenCount: 0,
           },
         ]}
         activeNames={[null]}
@@ -195,8 +196,8 @@ describe("ColumnBrowser", () => {
         providerSlug="nas"
         providerName="NAS"
         columns={[
-          { path: "", entries: [d("foo"), d("bar")], hash: "h0" },
-          { path: "foo", entries: [], hash: "h1" },
+          { path: "", entries: [d("foo"), d("bar")], hash: "h0", hiddenCount: 0 },
+          { path: "foo", entries: [], hash: "h1", hiddenCount: 0 },
         ]}
         activeNames={["foo", null]}
         selectedLeaf={null}
@@ -213,8 +214,8 @@ describe("ColumnBrowser", () => {
         providerSlug="nas"
         providerName="NAS"
         columns={[
-          { path: "", entries: [d("foo"), d("bar")], hash: "h0" },
-          { path: "bar", entries: [], hash: "h2" },
+          { path: "", entries: [d("foo"), d("bar")], hash: "h0", hiddenCount: 0 },
+          { path: "bar", entries: [], hash: "h2", hiddenCount: 0 },
         ]}
         activeNames={["bar", null]}
         selectedLeaf={null}

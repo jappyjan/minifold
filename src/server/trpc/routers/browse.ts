@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "../trpc";
 import { computeDirHash } from "@/server/browse/dir-hash";
-import { isHiddenEntry } from "@/server/browse/hidden";
+import { isListableEntry } from "@/server/browse/hidden";
 import { sortEntries } from "@/server/browse/sort";
 import { upsertDirCache } from "@/server/db/dir-cache";
 import { getDatabase } from "@/server/db";
@@ -24,6 +24,7 @@ export const browseRouter = router({
         providerSlug: z.string().min(1),
         path: z.string(),
         knownHash: z.string().optional(),
+        showHidden: z.boolean().optional(),
       }),
     )
     .query(async ({ input, ctx }) => {
@@ -64,7 +65,9 @@ export const browseRouter = router({
         return { changed: false as const, hash };
       }
 
-      const visibleAfterHidden = raw.filter((e) => !isHiddenEntry(e.name));
+      const visibleAfterHidden = raw.filter((e) =>
+        isListableEntry(e.name, input.showHidden ?? false),
+      );
       const allowed: Entry[] = [];
       for (const entry of visibleAfterHidden) {
         const child =

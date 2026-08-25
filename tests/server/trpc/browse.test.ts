@@ -101,6 +101,30 @@ describe("browse.list", () => {
     expect(result.entries.map((e) => e.name)).toEqual(["a.stl", "b.stl"]);
   });
 
+  it("hides dotfiles by default", async () => {
+    writeFileSync(join(storageRoot, ".env"), "SECRET=1\n");
+    const caller = appRouter.createCaller({ currentUser: user });
+    const result = await caller.browse.list({ providerSlug: "nas", path: "" });
+    if (!result.changed) throw new Error("expected changed:true");
+    expect(result.entries.map((e) => e.name)).toEqual(["a.stl", "b.stl"]);
+  });
+
+  it("showHidden:true reveals dotfiles but never .minifold_* internals", async () => {
+    writeFileSync(join(storageRoot, ".env"), "SECRET=1\n");
+    writeFileSync(join(storageRoot, ".minifold_access.yaml"), "default: signed-in\n");
+    const caller = appRouter.createCaller({ currentUser: user });
+    const result = await caller.browse.list({
+      providerSlug: "nas",
+      path: "",
+      showHidden: true,
+    });
+    if (!result.changed) throw new Error("expected changed:true");
+    const names = result.entries.map((e) => e.name);
+    expect(names).toContain(".env");
+    expect(names).not.toContain(".minifold_access.yaml");
+    expect(names).toHaveLength(3);
+  });
+
   it("returns NOT_FOUND for an unknown provider slug", async () => {
     const caller = appRouter.createCaller({ currentUser: user });
     await expect(
