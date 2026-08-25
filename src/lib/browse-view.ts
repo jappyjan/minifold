@@ -1,6 +1,22 @@
 export type BrowseView = "grid" | "column";
+export type SearchParamValue = string | string[] | undefined;
 
 export const VIEW_STORAGE_KEY = "minifold:browse-view";
+
+export function firstSearchParam(value: SearchParamValue): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+export function searchParamsFromRecord(
+  values: Record<string, SearchParamValue>,
+): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [key, raw] of Object.entries(values)) {
+    const value = firstSearchParam(raw);
+    if (value !== undefined) params.set(key, value);
+  }
+  return params;
+}
 
 export function mergeSearchParams(
   current: URLSearchParams,

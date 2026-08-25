@@ -74,8 +74,27 @@ describe("browse.list", () => {
       providerSlug: "nas",
       path: "",
       knownHash: first.hash,
+      knownShowHidden: false,
     });
     expect(second).toEqual({ changed: false, hash: first.hash });
+  });
+
+  it("returns changed:true when knownHash was produced with another hidden-file mode", async () => {
+    writeFileSync(join(storageRoot, ".env"), "SECRET=1\n");
+    const caller = appRouter.createCaller({ currentUser: user });
+    const hidden = await caller.browse.list({ providerSlug: "nas", path: "" });
+    if (!hidden.changed) throw new Error("expected changed:true");
+
+    const revealed = await caller.browse.list({
+      providerSlug: "nas",
+      path: "",
+      knownHash: hidden.hash,
+      knownShowHidden: false,
+      showHidden: true,
+    });
+    expect(revealed.changed).toBe(true);
+    if (!revealed.changed) throw new Error("expected changed:true");
+    expect(revealed.entries.map((entry) => entry.name)).toContain(".env");
   });
 
   it("returns changed:true when knownHash is stale", async () => {

@@ -21,7 +21,12 @@ import { decodePathSegments, encodePathSegments } from "@/server/browse/encode-p
 import { listWithCache } from "@/server/browse/list-cache";
 import { columnAncestorChain } from "@/server/browse/ancestor-chain";
 import { isThumbnailServiceEnabled } from "@/server/thumb/config";
-import { stripViewParam } from "@/lib/browse-view";
+import {
+  firstSearchParam,
+  mergeSearchParams,
+  searchParamsFromRecord,
+  stripViewParam,
+} from "@/lib/browse-view";
 import { Breadcrumbs } from "@/components/browse/Breadcrumbs";
 import { FolderBrowser } from "@/components/browse/FolderBrowser";
 import { FolderDescription } from "@/components/browse/FolderDescription";
@@ -36,27 +41,20 @@ import { createAccessResolver, type Resolver } from "@/server/access/resolver";
 import { getGlobalDefaultAccess } from "@/server/access/global-default";
 
 type Params = { provider: string; path?: string[] };
-type SearchParams = {
-  showAll?: string | string[];
-  showHidden?: string | string[];
-  view?: string | string[];
-};
+type SearchParams = Record<string, string | string[] | undefined>;
 
 function readViewParam(sp: SearchParams): "grid" | "column" {
-  const v = Array.isArray(sp.view) ? sp.view[0] : sp.view;
-  return v === "column" ? "column" : "grid";
+  return firstSearchParam(sp.view) === "column" ? "column" : "grid";
 }
 
-function hiddenToggleHref(sp: SearchParams, showHidden: boolean): string {
-  const params = new URLSearchParams();
-  for (const [k, raw] of Object.entries(sp)) {
-    if (raw === undefined || k === "showHidden") continue;
-    const v = Array.isArray(raw) ? raw[0] : raw;
-    if (v === undefined) continue;
-    params.set(k, v);
-  }
-  if (!showHidden) params.set("showHidden", "1");
-  const qs = params.toString();
+function toggleBrowseParamHref(
+  sp: SearchParams,
+  key: "showAll" | "showHidden",
+  enabled: boolean,
+): string {
+  const qs = mergeSearchParams(searchParamsFromRecord(sp), {
+    [key]: enabled ? null : "1",
+  });
   return qs ? `?${qs}` : "?";
 }
 
@@ -98,8 +96,8 @@ export default async function BrowsePage({
   const provider = providerFromRow(row);
   const path = segments.join("/");
   const sp = await searchParams;
-  const showAll = sp.showAll === "1";
-  const showHidden = sp.showHidden === "1";
+  const showAll = firstSearchParam(sp.showAll) === "1";
+  const showHidden = firstSearchParam(sp.showHidden) === "1";
   const view = readViewParam(sp);
 
   const user = await getCurrentUser();
@@ -163,13 +161,7 @@ export default async function BrowsePage({
     }
 
     const encodedPath = path ? `/${encodePathSegments(path)}` : "";
-    const incomingParams = new URLSearchParams();
-    for (const [k, raw] of Object.entries(sp)) {
-      if (raw === undefined) continue;
-      const v = Array.isArray(raw) ? raw[0] : raw;
-      if (v === undefined) continue;
-      incomingParams.set(k, v);
-    }
+    const incomingParams = searchParamsFromRecord(sp);
     const gridQs = stripViewParam(incomingParams);
     const gridHref = `/${slug}${encodedPath}${gridQs ? `?${gridQs}` : ""}`;
 
@@ -183,7 +175,7 @@ export default async function BrowsePage({
         {leafHiddenCount > 0 && (
           <div className="flex justify-end">
             <Link
-              href={hiddenToggleHref(sp, showHidden)}
+              href={toggleBrowseParamHref(sp, "showHidden", showHidden)}
               className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
             >
               {showHidden
@@ -234,7 +226,7 @@ export default async function BrowsePage({
           <div className="flex justify-end gap-4">
             {hiddenCount > 0 && (
               <Link
-                href={hiddenToggleHref(sp, showHidden)}
+                href={toggleBrowseParamHref(sp, "showHidden", showHidden)}
                 className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
               >
                 {showHidden
@@ -244,7 +236,7 @@ export default async function BrowsePage({
             )}
             {sidecars.size > 0 && (
               <Link
-                href={showAll ? "?" : "?showAll=1"}
+                href={toggleBrowseParamHref(sp, "showAll", showAll)}
                 className="text-xs text-neutral-500 underline hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100"
               >
                 {showAll

@@ -24,6 +24,7 @@ export const browseRouter = router({
         providerSlug: z.string().min(1),
         path: z.string(),
         knownHash: z.string().optional(),
+        knownShowHidden: z.boolean().optional(),
         showHidden: z.boolean().optional(),
       }),
     )
@@ -60,13 +61,17 @@ export const browseRouter = router({
       const hash = computeDirHash(raw);
       const cacheKey = `${input.providerSlug}/${input.path}`;
       upsertDirCache(db, cacheKey, hash, Date.now());
+      const showHidden = input.showHidden ?? false;
 
-      if (input.knownHash === hash) {
+      if (
+        input.knownHash === hash &&
+        input.knownShowHidden === showHidden
+      ) {
         return { changed: false as const, hash };
       }
 
       const visibleAfterHidden = raw.filter((e) =>
-        isListableEntry(e.name, input.showHidden ?? false),
+        isListableEntry(e.name, showHidden),
       );
       const allowed: Entry[] = [];
       for (const entry of visibleAfterHidden) {
